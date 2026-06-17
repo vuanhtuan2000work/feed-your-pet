@@ -1,4 +1,5 @@
 import type { PetRuntimeState } from '../../../types/pet'
+import type { PetAnimationKey } from '../../assets/manifest'
 
 export type PetSceneBridge = {
   getState: () => PetRuntimeState
@@ -7,6 +8,7 @@ export type PetSceneBridge = {
     y: number
     active: boolean
   }
+  getForcedAnimation: () => PetAnimationKey | undefined
   onPetClick: () => void
   onPositionChange: (x: number, y: number) => void
 }

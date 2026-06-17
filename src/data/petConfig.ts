@@ -5,6 +5,9 @@ export const CARE_DECAY_INTERVAL_MS = 5 * 60 * 1000
 export const LOCAL_STORAGE_KEY = 'feed-your-pet:state:v1'
 export const DEVICE_ID_KEY = 'feed-your-pet:device-id'
 export const BROADCAST_CHANNEL = 'feed-your-pet:pet-state'
+export const TAB_TRAVEL_CHANNEL = 'feed-your-pet:tab-travel'
+export const ACTIVE_TAB_KEY = 'feed-your-pet:active-tab'
+export const CURSOR_OWNER_KEY = 'feed-your-pet:cursor-owner'
 
 export const DEFAULT_STATS = {
   hunger: 80,

@@ -4,8 +4,11 @@
   "version": "0.0.0",
   "type": "module",
   "scripts": {
+    "predev": "npm run build:cat-variants",
     "dev": "vite",
+    "build:cat-variants": "node scripts/generate-cat-variants.mjs",
     "build:cat-type": "node scripts/build-cat-type-animation.mjs",
+    "prebuild": "npm run build:cat-variants",
     "build": "tsc -b && vite build",
     "build:worker": "tsc -p worker/tsconfig.json --noEmit",
     "check": "npm run build && npm run build:worker && wrangler deploy --dry-run",

@@ -1,6 +1,7 @@
 import { useEffect, useRef } from 'react'
 import { createPetGame } from '../game/phaser/createPetGame'
 import type { PetSceneBridge } from '../game/phaser/adapters/sceneBridge'
+import type { PetAnimationKey } from '../game/assets/manifest'
 import type { PetRuntimeState } from '../types/pet'
 
 type PetCanvasProps = {
@@ -10,14 +11,22 @@ type PetCanvasProps = {
     y: number
     active: boolean
   }
+  forcedAnimation?: PetAnimationKey
   onPetClick: () => void
   onPositionChange: (x: number, y: number) => void
 }
 
-export function PetCanvas({ state, pointer, onPetClick, onPositionChange }: PetCanvasProps) {
+export function PetCanvas({
+  state,
+  pointer,
+  forcedAnimation,
+  onPetClick,
+  onPositionChange,
+}: PetCanvasProps) {
   const hostRef = useRef<HTMLDivElement | null>(null)
   const stateRef = useRef(state)
   const pointerRef = useRef(pointer)
+  const forcedAnimationRef = useRef(forcedAnimation)
 
   useEffect(() => {
     stateRef.current = state
@@ -28,6 +37,10 @@ export function PetCanvas({ state, pointer, onPetClick, onPositionChange }: PetC
   }, [pointer])
 
   useEffect(() => {
+    forcedAnimationRef.current = forcedAnimation
+  }, [forcedAnimation])
+
+  useEffect(() => {
     if (!hostRef.current) {
       return
     }
@@ -35,6 +48,7 @@ export function PetCanvas({ state, pointer, onPetClick, onPositionChange }: PetC
     const bridge: PetSceneBridge = {
       getState: () => stateRef.current,
       getPointer: () => pointerRef.current,
+      getForcedAnimation: () => forcedAnimationRef.current,
       onPetClick,
       onPositionChange,
     }

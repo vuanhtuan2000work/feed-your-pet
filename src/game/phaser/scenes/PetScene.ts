@@ -108,6 +108,7 @@ export class PetScene extends Phaser.Scene {
     }
 
     const state = this.bridge.getState()
+    const forcedAnimation = this.bridge.getForcedAnimation()
     if (!state.currentReaction) {
       this.currentReactionId = undefined
       this.currentReactionPhase = undefined
@@ -121,7 +122,14 @@ export class PetScene extends Phaser.Scene {
       this.currentFollowTilt = 0
     }
 
-    if (isFollowingCursor) {
+    if (forcedAnimation) {
+      this.playAnimation(forcedAnimation)
+      this.currentReactionId = undefined
+      this.currentReactionPhase = undefined
+      this.activeMicro = undefined
+      this.pet.setScale(this.baseScale)
+      this.pet.setRotation(0)
+    } else if (isFollowingCursor) {
       this.moveToward(WIDGET_SIZE / 2, 188, delta, 70)
       this.playAnimation(this.getFollowCursorAnimation(time))
     } else if (state.currentReaction && state.actionUntil) {

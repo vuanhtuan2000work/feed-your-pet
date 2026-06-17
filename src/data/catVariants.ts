@@ -1,23 +1,6 @@
-export const CAT_VARIANTS = [
-  {
-    id: 'abyssinian',
-    label: 'Abyssinian',
-    runFolder: '1-Abyssinian-lengend',
-    runFileStem: 'Abyssinian-lengend',
-  },
-  {
-    id: 'american_bobtail',
-    label: 'American Bobtail',
-    runFolder: '2-American_Bobtail-lengend',
-    runFileStem: 'American_Bobtail-lengend',
-  },
-  {
-    id: 'american_curl',
-    label: 'American Curl',
-    runFolder: '3-American_Curl-lengend',
-    runFileStem: 'American_Curl-lengend',
-  },
-] as const
+import { GENERATED_CAT_VARIANTS } from './generatedCatVariants'
+
+export const CAT_VARIANTS = GENERATED_CAT_VARIANTS
 
 export type CatVariantId = (typeof CAT_VARIANTS)[number]['id']
 
