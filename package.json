@@ -1,0 +1,40 @@
+{
+  "name": "feed-your-pet",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build:cat-type": "node scripts/build-cat-type-animation.mjs",
+    "build": "tsc -b && vite build",
+    "build:worker": "tsc -p worker/tsconfig.json --noEmit",
+    "check": "npm run build && npm run build:worker && wrangler deploy --dry-run",
+    "lint": "eslint .",
+    "preview": "vite preview",
+    "worker:dev": "wrangler dev",
+    "worker:deploy": "wrangler deploy",
+    "db:migrate:local": "wrangler d1 migrations apply feed-your-pet-db --local"
+  },
+  "dependencies": {
+    "phaser": "^3.90.0",
+    "react": "^19.2.6",
+    "react-dom": "^19.2.6",
+    "zustand": "^5.0.14"
+  },
+  "devDependencies": {
+    "@cloudflare/workers-types": "^4.20260615.1",
+    "@eslint/js": "^10.0.1",
+    "@types/node": "^24.12.3",
+    "@types/react": "^19.2.14",
+    "@types/react-dom": "^19.2.3",
+    "@vitejs/plugin-react": "^6.0.1",
+    "eslint": "^10.3.0",
+    "eslint-plugin-react-hooks": "^7.1.1",
+    "eslint-plugin-react-refresh": "^0.5.2",
+    "globals": "^17.6.0",
+    "typescript": "~6.0.2",
+    "typescript-eslint": "^8.59.2",
+    "vite": "^8.0.12",
+    "wrangler": "^4.100.0"
+  }
+}

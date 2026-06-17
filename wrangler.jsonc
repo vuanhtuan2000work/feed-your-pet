@@ -1,0 +1,21 @@
+{
+  "$schema": "./node_modules/wrangler/config-schema.json",
+  "name": "feed-your-pet-api",
+  "main": "worker/index.ts",
+  "compatibility_date": "2026-06-15",
+  "compatibility_flags": ["nodejs_compat"],
+  "observability": {
+    "enabled": true,
+    "head_sampling_rate": 1
+  },
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "feed-your-pet-db",
+      "database_id": "replace-with-cloudflare-d1-database-id"
+    }
+  ],
+  "vars": {
+    "ENVIRONMENT": "development"
+  }
+}
