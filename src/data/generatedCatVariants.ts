@@ -2,27 +2,343 @@
 // Add folders under public/assets/pet/cat_actions/run and restart dev/build to update it.
 export const GENERATED_CAT_VARIANTS = [
   {
-    id: 'abyssinian',
-    label: 'Abyssinian',
-    runFolder: '1-Abyssinian-lengend',
-    runFileStem: 'Abyssinian-lengend'
-  },
-  {
-    id: 'american_bobtail',
-    label: 'American Bobtail',
-    runFolder: '2-American_Bobtail-lengend',
-    runFileStem: 'American_Bobtail-lengend'
-  },
-  {
-    id: 'american_curl',
-    label: 'American Curl',
-    runFolder: '3-American_Curl-lengend',
-    runFileStem: 'American_Curl-lengend'
-  },
-  {
     id: 'balinese',
     label: 'Balinese',
     runFolder: '4-Balinese-lengend',
-    runFileStem: 'Balinese-lengend'
+    runFileStem: 'Balinese-lengend',
+    level: 1,
+    levelOneHeight: 132,
+    runSheetWidth: 894,
+    runSheetHeight: 279,
+    runSheetSizes: {
+      run_down: {
+        width: 894,
+        height: 279
+      },
+      run_right: {
+        width: 866,
+        height: 288
+      },
+      run_down_right: {
+        width: 866,
+        height: 288
+      },
+      run_up_right: {
+        width: 866,
+        height: 288
+      },
+      run_up: {
+        width: 894,
+        height: 279
+      },
+      run_up_left: {
+        width: 866,
+        height: 288
+      },
+      run_left: {
+        width: 894,
+        height: 279
+      },
+      run_down_left: {
+        width: 866,
+        height: 288
+      }
+    },
+    runFrameRects: {
+      run_down: [
+        {
+          x: 45,
+          y: 8,
+          width: 134,
+          height: 265
+        },
+        {
+          x: 259,
+          y: 8,
+          width: 135,
+          height: 265
+        },
+        {
+          x: 481,
+          y: 8,
+          width: 135,
+          height: 265
+        },
+        {
+          x: 696,
+          y: 6,
+          width: 136,
+          height: 267
+        }
+      ],
+      run_right: [
+        {
+          x: 34,
+          y: 69,
+          width: 180,
+          height: 159
+        },
+        {
+          x: 219,
+          y: 97,
+          width: 197,
+          height: 130
+        },
+        {
+          x: 425,
+          y: 97,
+          width: 190,
+          height: 129
+        },
+        {
+          x: 658,
+          y: 68,
+          width: 183,
+          height: 161
+        }
+      ],
+      run_down_right: [
+        {
+          x: 13,
+          y: 56,
+          width: 194,
+          height: 174
+        },
+        {
+          x: 213,
+          y: 91,
+          width: 198,
+          height: 138
+        },
+        {
+          x: 418,
+          y: 92,
+          width: 226,
+          height: 138
+        },
+        {
+          x: 668,
+          y: 79,
+          width: 193,
+          height: 151
+        }
+      ],
+      run_up_right: [
+        {
+          x: 0,
+          y: 44,
+          width: 222,
+          height: 193
+        },
+        {
+          x: 224,
+          y: 43,
+          width: 219,
+          height: 188
+        },
+        {
+          x: 446,
+          y: 41,
+          width: 214,
+          height: 189
+        },
+        {
+          x: 667,
+          y: 41,
+          width: 199,
+          height: 191
+        }
+      ],
+      run_up: [
+        {
+          x: 53,
+          y: 20,
+          width: 115,
+          height: 240
+        },
+        {
+          x: 274,
+          y: 20,
+          width: 113,
+          height: 240
+        },
+        {
+          x: 485,
+          y: 20,
+          width: 113,
+          height: 240
+        },
+        {
+          x: 711,
+          y: 20,
+          width: 109,
+          height: 240
+        }
+      ],
+      run_up_left: [
+        {
+          x: 39,
+          y: 53,
+          width: 192,
+          height: 192
+        },
+        {
+          x: 248,
+          y: 58,
+          width: 182,
+          height: 191
+        },
+        {
+          x: 450,
+          y: 60,
+          width: 197,
+          height: 184
+        },
+        {
+          x: 669,
+          y: 61,
+          width: 195,
+          height: 189
+        }
+      ],
+      run_left: [
+        {
+          x: 20,
+          y: 74,
+          width: 216,
+          height: 144
+        },
+        {
+          x: 239,
+          y: 75,
+          width: 206,
+          height: 145
+        },
+        {
+          x: 454,
+          y: 77,
+          width: 228,
+          height: 142
+        },
+        {
+          x: 691,
+          y: 74,
+          width: 194,
+          height: 146
+        }
+      ],
+      run_down_left: [
+        {
+          x: 30,
+          y: 58,
+          width: 203,
+          height: 173
+        },
+        {
+          x: 239,
+          y: 93,
+          width: 201,
+          height: 135
+        },
+        {
+          x: 447,
+          y: 94,
+          width: 222,
+          height: 135
+        },
+        {
+          x: 662,
+          y: 72,
+          width: 178,
+          height: 158
+        }
+      ]
+    },
+    sleepSheetCount: 3,
+    sleepFrameCount: 4,
+    sleepSheetWidth: 866,
+    sleepSheetHeight: 288,
+    sleepFrameWidth: 216.5,
+    sleepFrameHeight: 288,
+    sleepFrameRects: [
+      [
+        {
+          x: 15,
+          y: 0,
+          width: 188,
+          height: 288
+        },
+        {
+          x: 203,
+          y: 0,
+          width: 226,
+          height: 288
+        },
+        {
+          x: 420,
+          y: 0,
+          width: 245,
+          height: 288
+        },
+        {
+          x: 674,
+          y: 0,
+          width: 180,
+          height: 288
+        }
+      ],
+      [
+        {
+          x: 18,
+          y: 0,
+          width: 195,
+          height: 288
+        },
+        {
+          x: 243,
+          y: 0,
+          width: 172,
+          height: 288
+        },
+        {
+          x: 460,
+          y: 0,
+          width: 170,
+          height: 288
+        },
+        {
+          x: 670,
+          y: 0,
+          width: 159,
+          height: 288
+        }
+      ],
+      [
+        {
+          x: 17,
+          y: 0,
+          width: 189,
+          height: 288
+        },
+        {
+          x: 246,
+          y: 0,
+          width: 163,
+          height: 288
+        },
+        {
+          x: 460,
+          y: 0,
+          width: 154,
+          height: 288
+        },
+        {
+          x: 658,
+          y: 0,
+          width: 155,
+          height: 288
+        }
+      ]
+    ]
   }
 ] as const

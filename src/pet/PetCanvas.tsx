@@ -1,6 +1,9 @@
 import { useEffect, useRef } from 'react'
 import { createPetGame } from '../game/phaser/createPetGame'
-import type { PetSceneBridge } from '../game/phaser/adapters/sceneBridge'
+import type {
+  PetHideAnchor,
+  PetSceneBridge,
+} from '../game/phaser/adapters/sceneBridge'
 import type { PetAnimationKey } from '../game/assets/manifest'
 import type { PetRuntimeState } from '../types/pet'
 
@@ -12,6 +15,8 @@ type PetCanvasProps = {
     active: boolean
   }
   forcedAnimation?: PetAnimationKey
+  forcedTilt?: number
+  hideAnchors: PetHideAnchor[]
   onPetClick: () => void
   onPositionChange: (x: number, y: number) => void
 }
@@ -20,6 +25,8 @@ export function PetCanvas({
   state,
   pointer,
   forcedAnimation,
+  forcedTilt,
+  hideAnchors,
   onPetClick,
   onPositionChange,
 }: PetCanvasProps) {
@@ -27,6 +34,10 @@ export function PetCanvas({
   const stateRef = useRef(state)
   const pointerRef = useRef(pointer)
   const forcedAnimationRef = useRef(forcedAnimation)
+  const forcedTiltRef = useRef(forcedTilt)
+  const hideAnchorsRef = useRef(hideAnchors)
+  const onPetClickRef = useRef(onPetClick)
+  const onPositionChangeRef = useRef(onPositionChange)
 
   useEffect(() => {
     stateRef.current = state
@@ -41,6 +52,22 @@ export function PetCanvas({
   }, [forcedAnimation])
 
   useEffect(() => {
+    forcedTiltRef.current = forcedTilt
+  }, [forcedTilt])
+
+  useEffect(() => {
+    hideAnchorsRef.current = hideAnchors
+  }, [hideAnchors])
+
+  useEffect(() => {
+    onPetClickRef.current = onPetClick
+  }, [onPetClick])
+
+  useEffect(() => {
+    onPositionChangeRef.current = onPositionChange
+  }, [onPositionChange])
+
+  useEffect(() => {
     if (!hostRef.current) {
       return
     }
@@ -49,13 +76,15 @@ export function PetCanvas({
       getState: () => stateRef.current,
       getPointer: () => pointerRef.current,
       getForcedAnimation: () => forcedAnimationRef.current,
-      onPetClick,
-      onPositionChange,
+      getForcedTilt: () => forcedTiltRef.current,
+      getHideAnchors: () => hideAnchorsRef.current,
+      onPetClick: () => onPetClickRef.current(),
+      onPositionChange: (x, y) => onPositionChangeRef.current(x, y),
     }
 
     const game = createPetGame(hostRef.current, bridge)
     return () => game.destroy(true)
-  }, [onPetClick, onPositionChange])
+  }, [])
 
   return <div ref={hostRef} className="pet-canvas" aria-label="Pet companion" />
 }

@@ -4,10 +4,18 @@ export const CAT_VARIANTS = GENERATED_CAT_VARIANTS
 
 export type CatVariantId = (typeof CAT_VARIANTS)[number]['id']
 
-export const DEFAULT_CAT_VARIANT_ID: CatVariantId = 'abyssinian'
+export const DEFAULT_CAT_VARIANT_ID: CatVariantId = 'balinese'
 
 export function isCatVariantId(value: unknown): value is CatVariantId {
   return CAT_VARIANTS.some((variant) => variant.id === value)
+}
+
+export function getCatVariant(variantId?: CatVariantId | string) {
+  return (
+    CAT_VARIANTS.find((variant) => variant.id === variantId) ??
+    CAT_VARIANTS.find((variant) => variant.id === DEFAULT_CAT_VARIANT_ID) ??
+    CAT_VARIANTS[0]
+  )
 }
 
 export function getCatVariantPreviewUrl(variant: (typeof CAT_VARIANTS)[number]) {

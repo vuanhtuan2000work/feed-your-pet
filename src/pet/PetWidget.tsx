@@ -11,11 +11,34 @@ import {
   readCursorOwner,
   type CursorOwnerEvent,
 } from '../services/tabTravelSync'
+import type { PetAnimationKey } from '../game/assets/manifest'
+import type { PetHideAnchor } from '../game/phaser/adapters/sceneBridge'
 
 const WIDGET_SIZE = 220
 const CHASE_DISTANCE = 96
+const VIEWPORT_MARGIN = 8
+const RELAXED_ROAM_SPEED_PX_PER_SECOND = 120
+const PLAYFUL_ROAM_SPEED_PX_PER_SECOND = 190
+const FREE_ROAM_MIN_TRAVEL_MS = 900
+const FREE_ROAM_MAX_TRAVEL_MS = 7_200
 const TAB_ID = CURRENT_TAB_ID
 const ACTIVE_TAB_TTL_MS = 2_500
+const HIDE_ANCHOR_SCAN_MS = 600
+const HIDE_ANCHOR_MIN_WIDTH = 32
+const HIDE_ANCHOR_MIN_HEIGHT = 24
+const HIDE_ANCHOR_SELECTOR = [
+  '[data-pet-hide-anchor]',
+  'a[href]',
+  'button',
+  'input',
+  'textarea',
+  'select',
+  'img',
+  'video',
+  '[role="button"]',
+  '[role="link"]',
+  '[role="img"]',
+].join(',')
 
 type ActiveTabRecord = {
   tabId: string
@@ -28,6 +51,12 @@ type WidgetPosition = {
 }
 
 type CursorEventLike = MouseEvent | PointerEvent
+
+type FreeRoamAnimationState = {
+  sessionKey: string
+  animation: PetAnimationKey
+  tilt: number
+}
 
 function clamp(value: number, min: number, max: number) {
   return Math.max(min, Math.min(max, value))
@@ -65,9 +94,84 @@ function shouldOwnPetInitially() {
 
 function getCursorAnchoredPosition(cursor: WidgetPosition) {
   return {
-    x: clamp(cursor.x - WIDGET_SIZE / 2, 8, window.innerWidth - WIDGET_SIZE - 8),
-    y: clamp(cursor.y - WIDGET_SIZE / 2, 8, window.innerHeight - WIDGET_SIZE - 8),
+    x: clamp(
+      cursor.x - WIDGET_SIZE / 2,
+      VIEWPORT_MARGIN,
+      window.innerWidth - WIDGET_SIZE - VIEWPORT_MARGIN,
+    ),
+    y: clamp(
+      cursor.y - WIDGET_SIZE / 2,
+      VIEWPORT_MARGIN,
+      window.innerHeight - WIDGET_SIZE - VIEWPORT_MARGIN,
+    ),
   }
+}
+
+function clampWidgetPosition(position: WidgetPosition, size: { width: number; height: number }) {
+  return {
+    x: clamp(position.x, VIEWPORT_MARGIN, window.innerWidth - size.width - VIEWPORT_MARGIN),
+    y: clamp(position.y, VIEWPORT_MARGIN, window.innerHeight - size.height - VIEWPORT_MARGIN),
+  }
+}
+
+function getRandomWidgetPosition(size: { width: number; height: number }) {
+  const xRatio = randomBetween(0.08, 0.92)
+  const yRatio = randomBetween(0.12, 0.88)
+  const x = window.innerWidth * xRatio - size.width / 2
+  const y = window.innerHeight * yRatio - size.height / 2
+
+  return clampWidgetPosition({ x, y }, size)
+}
+
+function getRandomRoamTravelMs(distance: number, speedPxPerSecond: number) {
+  return clamp(
+    (distance / Math.max(1, speedPxPerSecond)) * 1_000,
+    FREE_ROAM_MIN_TRAVEL_MS,
+    FREE_ROAM_MAX_TRAVEL_MS,
+  )
+}
+
+function getFreeRoamPointDistance(from: WidgetPosition, to: WidgetPosition) {
+  return Math.hypot(to.x - from.x, to.y - from.y)
+}
+
+function getRunAnimationFromDelta(dx: number, dy: number): PetAnimationKey {
+  if (Math.hypot(dx, dy) < 1) {
+    return 'run'
+  }
+
+  const degrees = (Math.atan2(dy, dx) * 180) / Math.PI
+  if (degrees >= -22.5 && degrees < 22.5) {
+    return 'run_right'
+  }
+  if (degrees >= 22.5 && degrees < 67.5) {
+    return 'run_down_right'
+  }
+  if (degrees >= 67.5 && degrees < 112.5) {
+    return 'run_down'
+  }
+  if (degrees >= 112.5 && degrees < 157.5) {
+    return 'run_down_left'
+  }
+  if (degrees >= 157.5 || degrees < -157.5) {
+    return 'run_left'
+  }
+  if (degrees >= -157.5 && degrees < -112.5) {
+    return 'run_up_left'
+  }
+  if (degrees >= -112.5 && degrees < -67.5) {
+    return 'run_up'
+  }
+  return 'run_up_right'
+}
+
+function getRunTiltFromDelta(dx: number, dy: number) {
+  const distance = Math.max(1, Math.hypot(dx, dy))
+  return clamp((dy / distance) * 0.16, -0.16, 0.16)
+}
+
+function randomBetween(min: number, max: number) {
+  return min + Math.random() * Math.max(0, max - min)
 }
 
 function isCurrentCursorOwnerEvent(event: CursorOwnerEvent) {
@@ -84,12 +188,98 @@ function isMouseInput(event: CursorEventLike) {
   return !('pointerType' in event) || event.pointerType === 'mouse'
 }
 
+function getRectIntersection(first: DOMRect, second: DOMRect) {
+  const left = Math.max(first.left, second.left)
+  const right = Math.min(first.right, second.right)
+  const top = Math.max(first.top, second.top)
+  const bottom = Math.min(first.bottom, second.bottom)
+
+  if (right <= left || bottom <= top) {
+    return undefined
+  }
+
+  return {
+    left,
+    top,
+    width: right - left,
+    height: bottom - top,
+  }
+}
+
+function isVisibleHideAnchor(element: HTMLElement, widget: HTMLElement) {
+  if (widget.contains(element) || element.closest('.pet-widget') || element.closest('.mouse-cursor')) {
+    return false
+  }
+
+  const style = window.getComputedStyle(element)
+  if (
+    style.display === 'none' ||
+    style.visibility === 'hidden' ||
+    style.opacity === '0' ||
+    element.hidden
+  ) {
+    return false
+  }
+
+  return true
+}
+
+function getHideAnchorSignature(anchors: PetHideAnchor[]) {
+  return anchors
+    .map((anchor) =>
+      [
+        anchor.id,
+        Math.round(anchor.x),
+        Math.round(anchor.y),
+        Math.round(anchor.width),
+        Math.round(anchor.height),
+      ].join(':'),
+    )
+    .join('|')
+}
+
+function collectPageHideAnchors(widget: HTMLElement): PetHideAnchor[] {
+  const widgetRect = widget.getBoundingClientRect()
+  if (widgetRect.width <= 0 || widgetRect.height <= 0) {
+    return []
+  }
+
+  return Array.from(document.querySelectorAll<HTMLElement>(HIDE_ANCHOR_SELECTOR))
+    .filter((element) => isVisibleHideAnchor(element, widget))
+    .map((element, index): PetHideAnchor | undefined => {
+      const elementRect = element.getBoundingClientRect()
+      const intersection = getRectIntersection(elementRect, widgetRect)
+      if (
+        !intersection ||
+        intersection.width < HIDE_ANCHOR_MIN_WIDTH ||
+        intersection.height < HIDE_ANCHOR_MIN_HEIGHT
+      ) {
+        return undefined
+      }
+
+      return {
+        id: element.id || element.dataset.petHideAnchor || `${element.tagName.toLowerCase()}:${index}`,
+        x: intersection.left - widgetRect.left,
+        y: intersection.top - widgetRect.top,
+        width: intersection.width,
+        height: intersection.height,
+      }
+    })
+    .filter((anchor): anchor is PetHideAnchor => anchor !== undefined)
+    .slice(0, 4)
+}
+
 export function PetWidget() {
   const widgetRef = useRef<HTMLElement | null>(null)
   const visibleRef = useRef(false)
   const ownerTabRef = useRef<string | undefined>(undefined)
   const cursorOwnerSignatureRef = useRef<string | undefined>(undefined)
+  const hideAnchorSignatureRef = useRef('')
   const cursorIdleTimerRef = useRef<number | undefined>(undefined)
+  const viewportRef = useRef({
+    width: window.innerWidth,
+    height: window.innerHeight,
+  })
   const state = usePetStore((store) => store.state)
   const menuOpen = usePetStore((store) => store.menuOpen)
   const setMenuOpen = usePetStore((store) => store.setMenuOpen)
@@ -113,6 +303,53 @@ export function PetWidget() {
     height: WIDGET_SIZE,
   })
   const [petRenderNonce, setPetRenderNonce] = useState(0)
+  const [hideAnchors, setHideAnchors] = useState<PetHideAnchor[]>([])
+  const [freeRoamAnimation, setFreeRoamAnimation] =
+    useState<FreeRoamAnimationState>()
+  const isFreeRoaming =
+    state.state === 'run' &&
+    state.currentReaction?.id === 'zoomies' &&
+    state.actionUntil !== undefined
+  const isMoodRandomRoaming =
+    (state.mood === 'relaxed' || state.mood === 'playful') &&
+    state.state !== 'sleep' &&
+    state.state !== 'eat' &&
+    state.state !== 'dream' &&
+    state.state !== 'follow_cursor' &&
+    state.state !== 'need_attention'
+  const isRandomRoaming = isFreeRoaming || isMoodRandomRoaming
+  const randomRoamSessionKey = isFreeRoaming
+    ? `reaction:${state.currentReaction?.startedAt ?? 0}`
+    : `mood:${state.state}:${state.mood}`
+  const forcedAnimation =
+    isRandomRoaming &&
+    freeRoamAnimation?.sessionKey === randomRoamSessionKey
+      ? freeRoamAnimation.animation
+      : undefined
+  const forcedTilt =
+    isRandomRoaming &&
+    freeRoamAnimation?.sessionKey === randomRoamSessionKey
+      ? freeRoamAnimation.tilt
+      : undefined
+
+  const refreshHideAnchors = useCallback(() => {
+    if (!petVisible || !widgetRef.current) {
+      if (hideAnchorSignatureRef.current !== '') {
+        hideAnchorSignatureRef.current = ''
+        setHideAnchors([])
+      }
+      return
+    }
+
+    const anchors = collectPageHideAnchors(widgetRef.current)
+    const signature = getHideAnchorSignature(anchors)
+    if (signature === hideAnchorSignatureRef.current) {
+      return
+    }
+
+    hideAnchorSignatureRef.current = signature
+    setHideAnchors(anchors)
+  }, [petVisible])
 
   const showPetAtCursor = useCallback((nextCursor: WidgetPosition) => {
     if (ownerTabRef.current !== TAB_ID) {
@@ -282,8 +519,72 @@ export function PetWidget() {
   }, [])
 
   useEffect(() => {
+    const keepPetInViewport = () => {
+      const previousViewport = viewportRef.current
+      const nextViewport = {
+        width: window.innerWidth,
+        height: window.innerHeight,
+      }
+
+      viewportRef.current = nextViewport
+      setChasePosition((current) => {
+        if (state.state !== 'sleep') {
+          return clampWidgetPosition(current, widgetSize)
+        }
+
+        const centerRatioX = (current.x + widgetSize.width / 2) / previousViewport.width
+        const centerRatioY = (current.y + widgetSize.height / 2) / previousViewport.height
+        return clampWidgetPosition(
+          {
+            x: nextViewport.width * centerRatioX - widgetSize.width / 2,
+            y: nextViewport.height * centerRatioY - widgetSize.height / 2,
+          },
+          widgetSize,
+        )
+      })
+    }
+
+    window.addEventListener('resize', keepPetInViewport)
+    window.addEventListener('orientationchange', keepPetInViewport)
+    keepPetInViewport()
+    return () => {
+      window.removeEventListener('resize', keepPetInViewport)
+      window.removeEventListener('orientationchange', keepPetInViewport)
+    }
+  }, [state.state, widgetSize])
+
+  useEffect(() => {
+    if (!petVisible) {
+      hideAnchorSignatureRef.current = ''
+      const frameId = window.requestAnimationFrame(() => setHideAnchors([]))
+      return () => window.cancelAnimationFrame(frameId)
+    }
+
+    const frameId = window.requestAnimationFrame(refreshHideAnchors)
+    const interval = window.setInterval(refreshHideAnchors, HIDE_ANCHOR_SCAN_MS)
+    window.addEventListener('scroll', refreshHideAnchors, true)
+    window.addEventListener('resize', refreshHideAnchors)
+
+    return () => {
+      window.cancelAnimationFrame(frameId)
+      window.clearInterval(interval)
+      window.removeEventListener('scroll', refreshHideAnchors, true)
+      window.removeEventListener('resize', refreshHideAnchors)
+    }
+  }, [petVisible, refreshHideAnchors])
+
+  useEffect(() => {
+    const frameId = window.requestAnimationFrame(refreshHideAnchors)
+    return () => window.cancelAnimationFrame(frameId)
+  }, [chasePosition.x, chasePosition.y, refreshHideAnchors, widgetSize.height, widgetSize.width])
+
+  useEffect(() => {
     const onPointerMove = (event: CursorEventLike) => {
       if (!isMouseInput(event)) {
+        return
+      }
+
+      if (state.state === 'sleep' || isRandomRoaming) {
         return
       }
 
@@ -314,16 +615,22 @@ export function PetWidget() {
       window.removeEventListener('blur', deactivateCursor)
       window.clearTimeout(cursorIdleTimerRef.current)
     }
-  }, [showPetAtCursor])
+  }, [isRandomRoaming, showPetAtCursor, state.state])
+
+  const petPointer = useMemo(
+    () => (state.state === 'sleep' ? { ...cursor, active: false } : cursor),
+    [cursor, state.state],
+  )
+  const canFollowCursor =
+    state.state === 'follow_cursor' || state.state === 'need_attention'
 
   const shouldChaseCursor =
     petVisible &&
     !menuOpen &&
+    !isRandomRoaming &&
     !isUserTyping() &&
-    state.state !== 'sleep' &&
-    state.state !== 'dream' &&
-    state.state !== 'eat' &&
-    cursor.active
+    canFollowCursor &&
+    petPointer.active
 
   useEffect(() => {
     if (!shouldChaseCursor) {
@@ -335,22 +642,21 @@ export function PetWidget() {
       setChasePosition((current) => {
         const centerX = current.x + widgetSize.width / 2
         const centerY = current.y + widgetSize.height / 2
-        const dx = cursor.x - centerX
-        const dy = cursor.y - centerY
+        const dx = petPointer.x - centerX
+        const dy = petPointer.y - centerY
         const distance = Math.max(1, Math.hypot(dx, dy))
-        const followStrength =
-          state.state === 'follow_cursor' || state.mood === 'playful' ? 0.14 : 0.075
-        const desiredCenterX = cursor.x - (dx / distance) * CHASE_DISTANCE
-        const desiredCenterY = cursor.y - (dy / distance) * CHASE_DISTANCE
+        const followStrength = state.state === 'follow_cursor' ? 0.14 : 0.1
+        const desiredCenterX = petPointer.x - (dx / distance) * CHASE_DISTANCE
+        const desiredCenterY = petPointer.y - (dy / distance) * CHASE_DISTANCE
         const targetX = clamp(
           desiredCenterX - widgetSize.width / 2,
-          8,
-          window.innerWidth - widgetSize.width - 8,
+          VIEWPORT_MARGIN,
+          window.innerWidth - widgetSize.width - VIEWPORT_MARGIN,
         )
         const targetY = clamp(
           desiredCenterY - widgetSize.height / 2,
-          8,
-          window.innerHeight - widgetSize.height - 8,
+          VIEWPORT_MARGIN,
+          window.innerHeight - widgetSize.height - VIEWPORT_MARGIN,
         )
 
         return {
@@ -364,11 +670,81 @@ export function PetWidget() {
     frameId = window.requestAnimationFrame(tickChase)
     return () => window.cancelAnimationFrame(frameId)
   }, [
-    cursor.x,
-    cursor.y,
+    petPointer.x,
+    petPointer.y,
     shouldChaseCursor,
     state.mood,
     state.state,
+    widgetSize,
+  ])
+
+  useEffect(() => {
+    if (!petVisible || menuOpen || !isRandomRoaming) {
+      return
+    }
+
+    let frameId = 0
+    let route:
+      | {
+          start: WidgetPosition
+          target: WidgetPosition
+          startedAt: number
+          travelMs: number
+        }
+      | undefined
+
+    const roam = (now: number) => {
+      setChasePosition((current) => {
+        if (!route) {
+          const target = getRandomWidgetPosition(widgetSize)
+          const distance = getFreeRoamPointDistance(current, target)
+          const speed = isFreeRoaming
+            ? PLAYFUL_ROAM_SPEED_PX_PER_SECOND
+            : state.mood === 'playful'
+              ? PLAYFUL_ROAM_SPEED_PX_PER_SECOND
+              : RELAXED_ROAM_SPEED_PX_PER_SECOND
+          const dx = target.x - current.x
+          const dy = target.y - current.y
+          setFreeRoamAnimation({
+            sessionKey: randomRoamSessionKey,
+            animation: getRunAnimationFromDelta(dx, dy),
+            tilt: getRunTiltFromDelta(dx, dy),
+          })
+          route = {
+            start: current,
+            target,
+            startedAt: now,
+            travelMs: getRandomRoamTravelMs(distance, speed),
+          }
+        }
+
+        const progress = clamp((now - route.startedAt) / route.travelMs, 0, 1)
+        const nextPosition = clampWidgetPosition(
+          {
+            x: route.start.x + (route.target.x - route.start.x) * progress,
+            y: route.start.y + (route.target.y - route.start.y) * progress,
+          },
+          widgetSize,
+        )
+
+        if (progress >= 1 || getFreeRoamPointDistance(nextPosition, route.target) < 4) {
+          route = undefined
+        }
+
+        return nextPosition
+      })
+      frameId = window.requestAnimationFrame(roam)
+    }
+
+    frameId = window.requestAnimationFrame(roam)
+    return () => window.cancelAnimationFrame(frameId)
+  }, [
+    isFreeRoaming,
+    isRandomRoaming,
+    menuOpen,
+    petVisible,
+    randomRoamSessionKey,
+    state.mood,
     widgetSize,
   ])
 
@@ -425,7 +801,10 @@ export function PetWidget() {
       <PetCanvas
         key={petRenderNonce}
         state={state}
-        pointer={cursor}
+        pointer={petPointer}
+        forcedAnimation={forcedAnimation}
+        forcedTilt={forcedTilt}
+        hideAnchors={hideAnchors}
         onPetClick={handlePetClick}
         onPositionChange={handlePositionChange}
       />

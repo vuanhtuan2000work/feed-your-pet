@@ -1,5 +1,6 @@
 import Phaser from 'phaser'
-import { PET_RENDER_SIZE, WIDGET_SIZE } from '../../../data/petConfig'
+import { PET_LEVEL_ONE_HEIGHT, WIDGET_SIZE } from '../../../data/petConfig'
+import { getCatVariant } from '../../../data/catVariants'
 import {
   CAT_VARIANT_MANIFESTS,
   getCatAssetManifest,
@@ -33,15 +34,32 @@ type FollowPointer = {
   y: number
 }
 
+type FrameContentBounds = {
+  width: number
+  height: number
+  denseWidth: number
+  denseHeight: number
+  visualSize: number
+}
+
 const FOLLOW_POINTER_MOVE_THRESHOLD = 2.5
 const FOLLOW_IDLE_DELAY_MS = 300
 const FOLLOW_RUN_MAX_TILT = 0.36
 const FOLLOW_HORIZONTAL_DEADZONE_RATIO = 0.18
 const FOLLOW_VERTICAL_DEADZONE_RATIO = 0.12
+const PET_DEPTH = 10
+const CONTENT_ALPHA_THRESHOLD = 64
+const CONTENT_DENSE_PROJECTION_RATIO = 0.1
+const CONTENT_VISUAL_MAJOR_WEIGHT = 0.82
+const CONTENT_VISUAL_AREA_WEIGHT = 0.18
 
 export class PetScene extends Phaser.Scene {
   private bridge!: PetSceneBridge
   private pet?: Phaser.GameObjects.Sprite
+  private occlusionMaskGraphics?: Phaser.GameObjects.Graphics
+  private occlusionMask?: Phaser.Display.Masks.GeometryMask
+  private contentBoundsByFrame = new Map<string, FrameContentBounds>()
+  private contentVisualSizeByAnimation = new Map<string, number>()
   private currentAnimation?: string
   private currentAnimationKey?: PetAnimationKey
   private currentReactionId?: string
@@ -92,6 +110,7 @@ export class PetScene extends Phaser.Scene {
     this.pet = this.add
       .sprite(startX, startY, idleFrame.textureKey, idleFrame.frame)
       .setOrigin(0.5, 1)
+      .setDepth(PET_DEPTH)
     this.syncFrameScale()
     this.pet.setScale(this.baseScale)
     this.pet.setInteractive({ useHandCursor: true })
@@ -100,6 +119,7 @@ export class PetScene extends Phaser.Scene {
     this.input.on('pointermove', (pointer: Phaser.Input.Pointer) => {
       this.lastPointerX = pointer.x
     })
+    this.occlusionMaskGraphics = this.add.graphics().setVisible(false)
   }
 
   update(time: number, delta: number) {
@@ -115,7 +135,9 @@ export class PetScene extends Phaser.Scene {
       this.currentReactionStartedAt = undefined
     }
 
-    const isFollowingCursor = state.state === 'follow_cursor' && !isUserTyping()
+    const isFollowingCursor =
+      (state.state === 'follow_cursor' || state.state === 'need_attention') &&
+      !isUserTyping()
     if (!isFollowingCursor) {
       this.lastFollowPointer = undefined
       this.lastFollowMoveAt = 0
@@ -128,7 +150,9 @@ export class PetScene extends Phaser.Scene {
       this.currentReactionPhase = undefined
       this.activeMicro = undefined
       this.pet.setScale(this.baseScale)
-      this.pet.setRotation(0)
+      this.pet.setRotation(
+        Phaser.Math.Linear(this.pet.rotation, this.bridge.getForcedTilt() ?? 0, 0.22),
+      )
     } else if (isFollowingCursor) {
       this.moveToward(WIDGET_SIZE / 2, 188, delta, 70)
       this.playAnimation(this.getFollowCursorAnimation(time))
@@ -142,13 +166,50 @@ export class PetScene extends Phaser.Scene {
       }
     } else if (state.state === 'sleep') {
       this.playAnimation('sleep')
-      this.applyAmbientMotion(time, 'sleepy')
+      this.syncFrameScale()
+      this.pet.setScale(this.baseScale)
+      this.pet.setRotation(0)
     } else {
       this.liveIdle(time, delta)
     }
 
+    this.updatePageOcclusionMask()
     this.applyPointerGaze()
     this.bridge.onPositionChange(Math.round(this.pet.x), Math.round(this.pet.y))
+  }
+
+  private updatePageOcclusionMask() {
+    if (!this.pet) {
+      return
+    }
+
+    const anchors = this.bridge.getHideAnchors()
+    if (anchors.length === 0) {
+      this.clearPageOcclusionMask()
+      return
+    }
+
+    const graphics = this.occlusionMaskGraphics ?? this.add.graphics().setVisible(false)
+    this.occlusionMaskGraphics = graphics
+    graphics.clear()
+    graphics.fillStyle(0xffffff, 1)
+    anchors.forEach((anchor) => {
+      graphics.fillRect(anchor.x, anchor.y, anchor.width, anchor.height)
+    })
+
+    if (!this.occlusionMask) {
+      this.occlusionMask = graphics.createGeometryMask()
+      this.occlusionMask.setInvertAlpha(true)
+      this.pet.setMask(this.occlusionMask)
+    }
+  }
+
+  private clearPageOcclusionMask() {
+    this.occlusionMaskGraphics?.clear()
+    if (this.pet?.mask) {
+      this.pet.clearMask(false)
+    }
+    this.occlusionMask = undefined
   }
 
   private createTextureFrames() {
@@ -400,9 +461,187 @@ export class PetScene extends Phaser.Scene {
       return
     }
 
+    const variant = getCatVariant(this.bridge.getState().catVariantId)
+    const level = Math.max(1, variant.level)
+    const levelScale = 1 + (level - 1) * 0.06
+    const levelOneHeight = variant.levelOneHeight || PET_LEVEL_ONE_HEIGHT
+    const contentVisualSize = this.getCurrentAnimationContentVisualSize()
+    this.baseScale = (levelOneHeight * levelScale) / Math.max(1, contentVisualSize)
+  }
+
+  private getCurrentAnimationContentVisualSize() {
+    if (!this.currentAnimationKey) {
+      return this.getCurrentFrameFallbackVisualSize()
+    }
+
+    const state = this.bridge.getState()
+    const cacheKey = `${state.catVariantId}:${this.currentAnimationKey}`
+    const cached = this.contentVisualSizeByAnimation.get(cacheKey)
+    if (cached !== undefined) {
+      return cached
+    }
+
+    const animation = this.getCurrentCatManifest().animations[this.currentAnimationKey]
+    const visualSize = Math.max(
+      this.getMedian(animation.frames.map((frame) => this.getFrameContentBounds(frame).visualSize)),
+      1,
+    )
+
+    this.contentVisualSizeByAnimation.set(cacheKey, visualSize)
+    return visualSize
+  }
+
+  private getFrameContentBounds(frameAsset: PetFrameAsset): FrameContentBounds {
+    const cacheKey = `${frameAsset.textureKey}:${frameAsset.frame}`
+    const cached = this.contentBoundsByFrame.get(cacheKey)
+    if (cached) {
+      return cached
+    }
+
+    const textureFrame = this.textures.getFrame(frameAsset.textureKey, frameAsset.frame)
+    const fallbackWidth =
+      textureFrame?.realWidth || textureFrame?.width || frameAsset.rect?.width || PET_LEVEL_ONE_HEIGHT
+    const fallbackHeight =
+      textureFrame?.realHeight || textureFrame?.height || frameAsset.rect?.height || PET_LEVEL_ONE_HEIGHT
+    const fallback = this.makeFrameContentBounds(fallbackWidth, fallbackHeight)
+
+    if (!textureFrame) {
+      this.contentBoundsByFrame.set(cacheKey, fallback)
+      return fallback
+    }
+
+    try {
+      const sourceImage = textureFrame.source.image as CanvasImageSource
+      const width = Math.max(1, Math.round(textureFrame.cutWidth || fallbackWidth))
+      const height = Math.max(1, Math.round(textureFrame.cutHeight || fallbackHeight))
+      const canvas = document.createElement('canvas')
+      canvas.width = width
+      canvas.height = height
+
+      const context = canvas.getContext('2d', { willReadFrequently: true })
+      if (!context) {
+        this.contentBoundsByFrame.set(cacheKey, fallback)
+        return fallback
+      }
+
+      context.drawImage(
+        sourceImage,
+        textureFrame.cutX,
+        textureFrame.cutY,
+        width,
+        height,
+        0,
+        0,
+        width,
+        height,
+      )
+
+      const pixels = context.getImageData(0, 0, width, height).data
+      const columnAlphaCounts = Array.from({ length: width }, () => 0)
+      const rowAlphaCounts = Array.from({ length: height }, () => 0)
+      let minX = width
+      let minY = height
+      let maxX = -1
+      let maxY = -1
+
+      for (let index = 3; index < pixels.length; index += 4) {
+        if (pixels[index] <= CONTENT_ALPHA_THRESHOLD) {
+          continue
+        }
+
+        const pixelIndex = (index - 3) / 4
+        const x = pixelIndex % width
+        const y = Math.floor(pixelIndex / width)
+        minX = Math.min(minX, x)
+        minY = Math.min(minY, y)
+        maxX = Math.max(maxX, x)
+        maxY = Math.max(maxY, y)
+        columnAlphaCounts[x] += 1
+        rowAlphaCounts[y] += 1
+      }
+
+      let bounds = fallback
+      if (maxX >= minX && maxY >= minY) {
+        const denseX = this.getDenseProjectionRange(columnAlphaCounts, minX, maxX)
+        const denseY = this.getDenseProjectionRange(rowAlphaCounts, minY, maxY)
+        bounds = this.makeFrameContentBounds(
+          maxX - minX + 1,
+          maxY - minY + 1,
+          denseX.max - denseX.min + 1,
+          denseY.max - denseY.min + 1,
+        )
+      }
+
+      this.contentBoundsByFrame.set(cacheKey, bounds)
+      return bounds
+    } catch {
+      this.contentBoundsByFrame.set(cacheKey, fallback)
+      return fallback
+    }
+  }
+
+  private makeFrameContentBounds(
+    width: number,
+    height: number,
+    denseWidth = width,
+    denseHeight = height,
+  ): FrameContentBounds {
+    const denseMajorSize = Math.max(denseWidth, denseHeight)
+    const denseAreaSize = Math.sqrt(Math.max(1, denseWidth * denseHeight))
+    return {
+      width,
+      height,
+      denseWidth,
+      denseHeight,
+      visualSize:
+        denseMajorSize * CONTENT_VISUAL_MAJOR_WEIGHT +
+        denseAreaSize * CONTENT_VISUAL_AREA_WEIGHT,
+    }
+  }
+
+  private getDenseProjectionRange(counts: number[], fallbackMin: number, fallbackMax: number) {
+    const maxCount = Math.max(...counts)
+    const threshold = Math.max(1, maxCount * CONTENT_DENSE_PROJECTION_RATIO)
+    let min = fallbackMin
+    let max = fallbackMax
+
+    for (let index = fallbackMin; index <= fallbackMax; index += 1) {
+      if ((counts[index] ?? 0) >= threshold) {
+        min = index
+        break
+      }
+    }
+
+    for (let index = fallbackMax; index >= fallbackMin; index -= 1) {
+      if ((counts[index] ?? 0) >= threshold) {
+        max = index
+        break
+      }
+    }
+
+    return { min, max }
+  }
+
+  private getMedian(values: number[]) {
+    if (values.length === 0) {
+      return 0
+    }
+
+    const sorted = [...values].sort((first, second) => first - second)
+    const middle = Math.floor(sorted.length / 2)
+    return sorted.length % 2 === 0
+      ? (sorted[middle - 1] + sorted[middle]) / 2
+      : sorted[middle]
+  }
+
+  private getCurrentFrameFallbackVisualSize() {
+    if (!this.pet) {
+      return PET_LEVEL_ONE_HEIGHT
+    }
+
     const frameWidth = this.pet.frame.realWidth || this.pet.frame.width
     const frameHeight = this.pet.frame.realHeight || this.pet.frame.height
-    this.baseScale = PET_RENDER_SIZE / Math.max(frameWidth, frameHeight)
+    return this.makeFrameContentBounds(frameWidth, frameHeight).visualSize
   }
 
   private playReactionMotion(

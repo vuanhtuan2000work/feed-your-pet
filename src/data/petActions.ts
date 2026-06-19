@@ -20,5 +20,4 @@ export const SLEEPING_PET_ACTIONS: PetActionDefinition[] = [
   { id: 'wake_up', icon: 'Wake', label: 'Wake', angle: -90 },
   { id: 'pet_head', icon: 'Pat', label: 'Pet', angle: -150 },
   { id: 'feed', icon: 'Food', label: 'Feed', angle: -30 },
-  { id: 'dream', icon: 'Moon', label: 'Dream', angle: 90 },
 ]

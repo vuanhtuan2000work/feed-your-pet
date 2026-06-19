@@ -1,12 +1,102 @@
-import { readdir, writeFile } from 'node:fs/promises'
+import { access, readFile, readdir, writeFile } from 'node:fs/promises'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 const currentDir = path.dirname(fileURLToPath(import.meta.url))
 const defaultRoot = path.resolve(currentDir, '..')
 const catRunDir = 'public/assets/pet/cat_actions/run'
+const catSleepDir = 'public/assets/pet/cat_actions/sleep'
 const outputFile = 'src/data/generatedCatVariants.ts'
 const folderPattern = /^(\d+)-(.+)-(lengend|legend)$/
+const defaultLevel = 1
+const defaultLevelOneHeight = 132
+const enabledCatOrders = new Set([4])
+const runSourceFiles = {
+  run_down: 1,
+  run_right: 2,
+  run_down_right: 3,
+  run_up_right: 4,
+  run_up: 5,
+  run_up_left: 6,
+  run_left: 7,
+  run_down_left: 8,
+}
+const runFrameRectsByVariantId = {
+  balinese: {
+    run_down: [
+      { x: 45, y: 8, width: 134, height: 265 },
+      { x: 259, y: 8, width: 135, height: 265 },
+      { x: 481, y: 8, width: 135, height: 265 },
+      { x: 696, y: 6, width: 136, height: 267 },
+    ],
+    run_right: [
+      { x: 34, y: 69, width: 180, height: 159 },
+      { x: 219, y: 97, width: 197, height: 130 },
+      { x: 425, y: 97, width: 190, height: 129 },
+      { x: 658, y: 68, width: 183, height: 161 },
+    ],
+    run_down_right: [
+      { x: 13, y: 56, width: 194, height: 174 },
+      { x: 213, y: 91, width: 198, height: 138 },
+      { x: 418, y: 92, width: 226, height: 138 },
+      { x: 668, y: 79, width: 193, height: 151 },
+    ],
+    run_up_right: [
+      { x: 0, y: 44, width: 222, height: 193 },
+      { x: 224, y: 43, width: 219, height: 188 },
+      { x: 446, y: 41, width: 214, height: 189 },
+      { x: 667, y: 41, width: 215, height: 191 },
+    ],
+    run_up: [
+      { x: 53, y: 20, width: 115, height: 240 },
+      { x: 274, y: 20, width: 113, height: 240 },
+      { x: 485, y: 20, width: 113, height: 240 },
+      { x: 711, y: 20, width: 109, height: 240 },
+    ],
+    run_up_left: [
+      { x: 39, y: 53, width: 192, height: 192 },
+      { x: 248, y: 58, width: 182, height: 191 },
+      { x: 450, y: 60, width: 197, height: 184 },
+      { x: 669, y: 61, width: 195, height: 189 },
+    ],
+    run_left: [
+      { x: 20, y: 74, width: 216, height: 144 },
+      { x: 239, y: 75, width: 206, height: 145 },
+      { x: 454, y: 77, width: 228, height: 142 },
+      { x: 691, y: 74, width: 194, height: 146 },
+    ],
+    run_down_left: [
+      { x: 30, y: 58, width: 203, height: 173 },
+      { x: 239, y: 93, width: 201, height: 135 },
+      { x: 447, y: 94, width: 222, height: 135 },
+      { x: 662, y: 72, width: 178, height: 158 },
+    ],
+  },
+}
+const sleepSheetCount = 3
+const sleepFrameCount = 4
+const sleepFrameRectsByVariantId = {
+  balinese: [
+    [
+      { x: 15, width: 188 },
+      { x: 203, width: 226 },
+      { x: 420, width: 245 },
+      { x: 674, width: 180 },
+    ],
+    [
+      { x: 18, width: 195 },
+      { x: 243, width: 172 },
+      { x: 460, width: 170 },
+      { x: 670, width: 159 },
+    ],
+    [
+      { x: 17, width: 189 },
+      { x: 246, width: 163 },
+      { x: 460, width: 154 },
+      { x: 658, width: 155 },
+    ],
+  ],
+}
 
 function toId(name) {
   return name
@@ -33,10 +123,36 @@ function makeSource(variants) {
   ].join('\n')
 }
 
+async function readPngSize(filePath) {
+  const header = await readFile(filePath)
+  return {
+    width: header.readUInt32BE(16),
+    height: header.readUInt32BE(20),
+  }
+}
+
+async function fileExists(filePath) {
+  try {
+    await access(filePath)
+    return true
+  } catch {
+    return false
+  }
+}
+
+function clampFrameRects(rects, sheetSize) {
+  return rects.map((rect) => ({
+    x: Math.max(0, rect.x),
+    y: Math.max(0, rect.y ?? 0),
+    width: Math.min(rect.width, sheetSize.width - rect.x),
+    height: Math.min(rect.height ?? sheetSize.height, sheetSize.height - (rect.y ?? 0)),
+  }))
+}
+
 export async function generateCatVariants({ root = defaultRoot } = {}) {
   const absoluteCatRunDir = path.join(root, catRunDir)
   const entries = await readdir(absoluteCatRunDir, { withFileTypes: true }).catch(() => [])
-  const variants = entries
+  const variantInputs = entries
     .filter((entry) => entry.isDirectory())
     .map((entry) => {
       const match = entry.name.match(folderPattern)
@@ -55,8 +171,74 @@ export async function generateCatVariants({ root = defaultRoot } = {}) {
       }
     })
     .filter(Boolean)
+    .filter((variant) => enabledCatOrders.has(variant.order))
     .sort((first, second) => first.order - second.order)
-    .map(({ order: _order, ...variant }) => variant)
+  const variants = await Promise.all(
+    variantInputs.map(async ({ order: _order, ...variant }) => {
+      const previewPath = path.join(
+        absoluteCatRunDir,
+        variant.runFolder,
+        `1-${variant.runFileStem}.png`,
+      )
+      const sleepPreviewPath = path.join(
+        root,
+        catSleepDir,
+        variant.runFolder,
+        `1-${variant.runFileStem}.png`,
+      )
+      const size = await readPngSize(previewPath)
+      const runSheetSizesEntries = await Promise.all(
+        Object.entries(runSourceFiles).map(async ([sourceKey, fileNumber]) => {
+          const sourcePath = path.join(
+            absoluteCatRunDir,
+            variant.runFolder,
+            `${fileNumber}-${variant.runFileStem}.png`,
+          )
+          const sourceSize = await readPngSize(sourcePath)
+          return [sourceKey, sourceSize]
+        }),
+      )
+      const runSheetSizes = Object.fromEntries(runSheetSizesEntries)
+      const runFrameRects = Object.fromEntries(
+        await Promise.all(
+          Object.entries(runFrameRectsByVariantId[variant.id] ?? {}).map(
+            async ([sourceKey, rects]) => {
+              const sourceSize = runSheetSizes[sourceKey]
+              return [sourceKey, clampFrameRects(rects, sourceSize)]
+            },
+          ),
+        ),
+      )
+      const nextVariant = {
+        ...variant,
+        level: defaultLevel,
+        levelOneHeight: defaultLevelOneHeight,
+        runSheetWidth: size.width,
+        runSheetHeight: size.height,
+        runSheetSizes,
+        ...(Object.keys(runFrameRects).length > 0 ? { runFrameRects } : {}),
+      }
+
+      if (await fileExists(sleepPreviewPath)) {
+        const sleepSize = await readPngSize(sleepPreviewPath)
+        const sleepFrameRects = sleepFrameRectsByVariantId[variant.id]?.map((sheet) =>
+          clampFrameRects(sheet, sleepSize),
+        )
+        return {
+          ...nextVariant,
+          sleepSheetCount,
+          sleepFrameCount,
+          sleepSheetWidth: sleepSize.width,
+          sleepSheetHeight: sleepSize.height,
+          sleepFrameWidth: sleepSize.width / sleepFrameCount,
+          sleepFrameHeight: sleepSize.height,
+          ...(sleepFrameRects ? { sleepFrameRects } : {}),
+        }
+      }
+
+      return nextVariant
+    }),
+  )
 
   await writeFile(path.join(root, outputFile), makeSource(variants))
   return variants

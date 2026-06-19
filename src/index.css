@@ -32,54 +32,10 @@ input {
 
 .demo-page {
   min-height: 100vh;
-  display: grid;
-  place-items: center;
-  padding: 24px;
   background:
     radial-gradient(circle at 20% 20%, rgba(255, 208, 168, 0.42), transparent 32%),
     radial-gradient(circle at 82% 16%, rgba(177, 222, 255, 0.38), transparent 30%),
     linear-gradient(180deg, #fffaf5 0%, #ffeede 100%);
-}
-
-.demo-panel {
-  width: min(640px, 100%);
-  padding: 32px;
-  border: 1px solid rgba(105, 74, 51, 0.14);
-  border-radius: 8px;
-  background: rgba(255, 255, 255, 0.74);
-  box-shadow: 0 18px 48px rgba(108, 71, 38, 0.14);
-}
-
-.demo-panel h1 {
-  margin: 8px 0 12px;
-  font-size: clamp(2.4rem, 8vw, 5rem);
-  line-height: 0.95;
-}
-
-.demo-panel p {
-  max-width: 52ch;
-  margin: 0;
-  color: #6f6175;
-  font-size: 1rem;
-  line-height: 1.6;
-}
-
-.demo-panel input {
-  width: 100%;
-  margin-top: 24px;
-  padding: 12px 14px;
-  border: 1px solid rgba(105, 74, 51, 0.18);
-  border-radius: 8px;
-  background: #fff;
-  color: #2a2433;
-}
-
-.eyebrow {
-  color: #9e5b24;
-  font-size: 0.78rem;
-  font-weight: 800;
-  letter-spacing: 0.12em;
-  text-transform: uppercase;
 }
 
 .pet-widget {
@@ -217,92 +173,30 @@ input {
 
 .mouse-cursor {
   position: fixed;
-  left: -14px;
-  top: -14px;
-  width: 38px;
-  height: 28px;
-  z-index: 1000000;
+  left: -36px;
+  top: -36px;
+  width: 72px;
+  height: 72px;
+  z-index: 2147483647;
+  isolation: isolate;
   pointer-events: none;
-  filter: drop-shadow(0 8px 10px rgba(65, 43, 30, 0.24));
   transition: opacity 120ms ease;
 }
 
-.mouse-cursor__body {
-  position: relative;
-  width: 30px;
-  height: 20px;
-  border-radius: 52% 46% 48% 52%;
-  background:
-    radial-gradient(circle at 21px 8px, #15110f 0 1.5px, transparent 2px),
-    linear-gradient(135deg, #cbc2b7 0%, #92877c 68%, #74685d 100%);
-  transform: rotate(-10deg);
-  transform-origin: 70% 55%;
-  animation: mouse-scurry 640ms ease-in-out infinite alternate;
+.mouse-cursor__sprite {
+  display: block;
+  width: 72px;
+  height: 72px;
+  background-image: url('/assets/cursor/mouse-run.png');
+  background-repeat: no-repeat;
+  background-size: 576px 72px;
+  filter: drop-shadow(0 8px 10px rgba(65, 43, 30, 0.24));
+  transform-origin: center;
+  will-change: background-position, transform;
 }
 
-.mouse-cursor__ear {
-  position: absolute;
-  top: -5px;
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
-  background: #8f847a;
-  border: 1px solid rgba(70, 50, 38, 0.28);
-}
-
-.mouse-cursor__ear--left {
-  left: 14px;
-}
-
-.mouse-cursor__ear--right {
-  left: 20px;
-  top: -4px;
-}
-
-.mouse-cursor__eye {
-  position: absolute;
-  right: 6px;
-  top: 7px;
-  width: 3px;
-  height: 3px;
-  border-radius: 50%;
-  background: #171312;
-}
-
-.mouse-cursor__nose {
-  position: absolute;
-  right: -2px;
-  top: 9px;
-  width: 4px;
-  height: 4px;
-  border-radius: 50%;
-  background: #8b5b55;
-}
-
-.mouse-cursor__tail {
-  position: absolute;
-  left: -17px;
-  top: 12px;
-  width: 20px;
-  height: 8px;
-  border-bottom: 2px solid #9b8274;
-  border-radius: 50%;
-  transform: rotate(14deg);
-}
-
-.mouse-cursor--pressed .mouse-cursor__body {
-  animation-duration: 180ms;
-  transform: rotate(-6deg) scale(0.92);
-}
-
-@keyframes mouse-scurry {
-  from {
-    transform: rotate(-12deg) translateY(0);
-  }
-
-  to {
-    transform: rotate(-8deg) translateY(-1.5px);
-  }
+.mouse-cursor--pressed .mouse-cursor__sprite {
+  transform: scale(0.92);
 }
 
 @media (max-width: 640px) {

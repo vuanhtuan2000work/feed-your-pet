@@ -48,20 +48,19 @@ export function decideReaction(
     pet.memory.pettingCountInShortTime >
     Math.max(2, Math.round(pet.personality.tolerance / 22))
 
-  if (pet.state === 'sleep' && action !== 'sleep' && action !== 'dream') {
-    if (pet.energy < 26 && action !== 'feed') {
-      return decision('sleepy_refuse_wake', 'sleep', 'sleepy', 2_500, false)
-    }
+  if (
+    pet.state === 'sleep' &&
+    (action === 'wake_up' || action === 'pet_head' || action === 'feed')
+  ) {
+    return decision('zoomies', 'run', 'playful', 22_000)
+  }
 
-    return decision('wake_stretch', 'idle', 'relaxed', 3_600)
+  if (pet.state === 'sleep') {
+    return decision('sleepy_refuse_wake', 'sleep', 'sleepy', 0, false)
   }
 
   if (action === 'wake_up') {
-    if (pet.state !== 'sleep') {
-      return decision('slow_blink_accept', 'idle', 'curious', 1_800, false)
-    }
-
-    return decision('wake_stretch', 'idle', 'relaxed', 3_600)
+    return decision('slow_blink_accept', 'idle', 'curious', 1_800, false)
   }
 
   if (action === 'feed') {
@@ -139,10 +138,6 @@ export function decideReaction(
   }
 
   if (action === 'sleep') {
-    if (pet.energy > 72 && pet.personality.playfulness > 62) {
-      return decision('resist_sleep', 'sleep', 'playful', 2_000, false)
-    }
-
     return decision('curl_sleep', 'sleep', 'sleepy', 3_800)
   }
 

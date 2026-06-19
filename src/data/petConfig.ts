@@ -1,5 +1,6 @@
 export const WIDGET_SIZE = 220
-export const PET_RENDER_SIZE = 172
+export const PET_LEVEL_ONE_HEIGHT = 132
+export const PET_RENDER_SIZE = PET_LEVEL_ONE_HEIGHT
 export const ONE_HOUR_MS = 60 * 60 * 1000
 export const CARE_DECAY_INTERVAL_MS = 5 * 60 * 1000
 export const LOCAL_STORAGE_KEY = 'feed-your-pet:state:v1'

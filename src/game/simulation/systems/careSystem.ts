@@ -7,6 +7,15 @@ export function applyCareAction(
   action: PetActionId,
   nowMs = Date.now(),
 ): PetRuntimeState {
+  if (
+    state.state === 'sleep' &&
+    action !== 'wake_up' &&
+    action !== 'pet_head' &&
+    action !== 'feed'
+  ) {
+    return state
+  }
+
   const now = new Date(nowMs).toISOString()
   const decision = decideReaction(state, action)
   const next: PetRuntimeState = {

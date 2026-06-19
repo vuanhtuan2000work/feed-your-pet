@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import {
   CURRENT_TAB_ID,
   createTabTravelBroadcast,
@@ -13,9 +13,17 @@ type CursorPoint = {
   visible: boolean
   pressed: boolean
   overControl: boolean
+  frameIndex: number
 }
 
 type CursorEventLike = MouseEvent | PointerEvent
+type CursorPosition = Pick<CursorPoint, 'x' | 'y'>
+
+const MOUSE_FRAME_SIZE = 72
+const MOUSE_IDLE_FRAME_INDEX = 5
+const MOUSE_IDLE_DELAY_MS = 260
+const MOUSE_MOVEMENT_THRESHOLD = 2
+const MOUSE_RUN_FRAME_MS = 96
 
 function isControlTarget(target: EventTarget | null) {
   if (!(target instanceof HTMLElement)) {
@@ -37,13 +45,64 @@ function isCurrentCursorOwnerEvent(event: CursorOwnerEvent) {
   )
 }
 
+function getMouseFrameIndexFromDelta(dx: number, dy: number) {
+  if (Math.hypot(dx, dy) < MOUSE_MOVEMENT_THRESHOLD) {
+    return MOUSE_IDLE_FRAME_INDEX
+  }
+
+  const degrees = (Math.atan2(dy, dx) * 180) / Math.PI
+  if (degrees >= -22.5 && degrees < 22.5) {
+    return 2
+  }
+  if (degrees >= 22.5 && degrees < 67.5) {
+    return 1
+  }
+  if (degrees >= 67.5 && degrees < 112.5) {
+    return 0
+  }
+  if (degrees >= 112.5 && degrees < 157.5) {
+    return 7
+  }
+  if (degrees >= 157.5 || degrees < -157.5) {
+    return 6
+  }
+  if (degrees >= -157.5 && degrees < -112.5) {
+    return 5
+  }
+  if (degrees >= -112.5 && degrees < -67.5) {
+    return 4
+  }
+  return 3
+}
+
+function getMouseRunFrameSequence(frameIndex: number) {
+  const sequences: Record<number, number[]> = {
+    0: [0, 1, 0, 7],
+    1: [1, 2, 1, 0],
+    2: [2, 3, 2, 1],
+    3: [3, 4, 3, 2],
+    4: [4, 5, 4, 3],
+    5: [5, 6, 5, 4],
+    6: [6, 7, 6, 5],
+    7: [7, 0, 7, 6],
+  }
+
+  return sequences[frameIndex] ?? [frameIndex]
+}
+
 export function MouseCursor() {
+  const lastPositionRef = useRef<CursorPosition | undefined>(undefined)
+  const idleTimerRef = useRef<number | undefined>(undefined)
+  const runTimerRef = useRef<number | undefined>(undefined)
+  const runSequenceKeyRef = useRef<number | undefined>(undefined)
+  const runSequenceStepRef = useRef(0)
   const [cursor, setCursor] = useState<CursorPoint>({
     x: -100,
     y: -100,
     visible: false,
     pressed: false,
     overControl: false,
+    frameIndex: MOUSE_IDLE_FRAME_INDEX,
   })
 
   useEffect(() => {
@@ -71,11 +130,68 @@ export function MouseCursor() {
     const isMouseInput = (event: CursorEventLike) =>
       !('pointerType' in event) || event.pointerType === 'mouse'
 
+    const stopMovementLoop = () => {
+      window.clearInterval(runTimerRef.current)
+      runTimerRef.current = undefined
+      runSequenceKeyRef.current = undefined
+      runSequenceStepRef.current = 0
+    }
+
+    const startMovementLoop = (frameIndex: number) => {
+      if (runSequenceKeyRef.current === frameIndex && runTimerRef.current !== undefined) {
+        return
+      }
+
+      stopMovementLoop()
+      const sequence = getMouseRunFrameSequence(frameIndex)
+      runSequenceKeyRef.current = frameIndex
+      runSequenceStepRef.current = 0
+      setCursor((current) => ({ ...current, frameIndex: sequence[0] }))
+      runTimerRef.current = window.setInterval(() => {
+        runSequenceStepRef.current = (runSequenceStepRef.current + 1) % sequence.length
+        setCursor((current) => ({
+          ...current,
+          frameIndex: sequence[runSequenceStepRef.current],
+        }))
+      }, MOUSE_RUN_FRAME_MS)
+    }
+
+    const scheduleIdleFrame = () => {
+      window.clearTimeout(idleTimerRef.current)
+      idleTimerRef.current = window.setTimeout(() => {
+        stopMovementLoop()
+        setCursor((current) => ({ ...current, frameIndex: MOUSE_IDLE_FRAME_INDEX }))
+      }, MOUSE_IDLE_DELAY_MS)
+    }
+
+    const updateMovementFrame = (event: CursorEventLike) => {
+      const previous = lastPositionRef.current
+      const nextPosition = { x: event.clientX, y: event.clientY }
+      lastPositionRef.current = nextPosition
+
+      if (!previous) {
+        scheduleIdleFrame()
+        return undefined
+      }
+
+      const dx = nextPosition.x - previous.x
+      const dy = nextPosition.y - previous.y
+      scheduleIdleFrame()
+      if (Math.hypot(dx, dy) < MOUSE_MOVEMENT_THRESHOLD) {
+        return undefined
+      }
+
+      const frameIndex = getMouseFrameIndexFromDelta(dx, dy)
+      startMovementLoop(frameIndex)
+      return frameIndex
+    }
+
     const move = (event: CursorEventLike) => {
       if (!isMouseInput(event)) {
         return
       }
 
+      const frameIndex = updateMovementFrame(event)
       claimCursor(event)
       setCursor((current) => ({
         ...current,
@@ -83,6 +199,7 @@ export function MouseCursor() {
         y: event.clientY,
         visible: true,
         overControl: isControlTarget(event.target),
+        frameIndex: frameIndex ?? current.frameIndex,
       }))
     }
     const down = (event: CursorEventLike) => {
@@ -94,12 +211,22 @@ export function MouseCursor() {
       setCursor((current) => ({ ...current, pressed: true }))
     }
     const up = () => setCursor((current) => ({ ...current, pressed: false }))
-    const leave = () => setCursor((current) => ({ ...current, visible: false }))
+    const leave = () => {
+      window.clearTimeout(idleTimerRef.current)
+      stopMovementLoop()
+      lastPositionRef.current = undefined
+      setCursor((current) => ({
+        ...current,
+        visible: false,
+        frameIndex: MOUSE_IDLE_FRAME_INDEX,
+      }))
+    }
     const enter = (event: CursorEventLike) => {
       if (!isMouseInput(event)) {
         return
       }
 
+      lastPositionRef.current = { x: event.clientX, y: event.clientY }
       claimCursor(event)
       setCursor((current) => ({
         ...current,
@@ -107,11 +234,20 @@ export function MouseCursor() {
         y: event.clientY,
         visible: true,
         overControl: isControlTarget(event.target),
+        frameIndex: MOUSE_IDLE_FRAME_INDEX,
       }))
     }
     const hideWhenInactive = () => {
       if (document.visibilityState !== 'visible') {
-        setCursor((current) => ({ ...current, visible: false, pressed: false }))
+        window.clearTimeout(idleTimerRef.current)
+        stopMovementLoop()
+        lastPositionRef.current = undefined
+        setCursor((current) => ({
+          ...current,
+          visible: false,
+          pressed: false,
+          frameIndex: MOUSE_IDLE_FRAME_INDEX,
+        }))
       }
     }
 
@@ -140,6 +276,8 @@ export function MouseCursor() {
       window.removeEventListener('mouseenter', enter)
       window.removeEventListener('blur', leave)
       document.removeEventListener('visibilitychange', hideWhenInactive)
+      window.clearTimeout(idleTimerRef.current)
+      stopMovementLoop()
       cursorSync.close()
     }
   }, [])
@@ -162,13 +300,12 @@ export function MouseCursor() {
       style={{ transform: `translate3d(${cursor.x}px, ${cursor.y}px, 0)` }}
       aria-hidden="true"
     >
-      <div className="mouse-cursor__body">
-        <span className="mouse-cursor__ear mouse-cursor__ear--left" />
-        <span className="mouse-cursor__ear mouse-cursor__ear--right" />
-        <span className="mouse-cursor__eye" />
-        <span className="mouse-cursor__nose" />
-        <span className="mouse-cursor__tail" />
-      </div>
+      <span
+        className="mouse-cursor__sprite"
+        style={{
+          backgroundPosition: `-${cursor.frameIndex * MOUSE_FRAME_SIZE}px 0`,
+        }}
+      />
     </div>
   )
 }

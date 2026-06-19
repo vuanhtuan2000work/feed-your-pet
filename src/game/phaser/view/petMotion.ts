@@ -99,7 +99,7 @@ export const REACTION_MOTIONS: Record<PetReactionId, PetMotionProfile> = {
     settleMs: 300,
   },
   zoomies: {
-    animation: 'play',
+    animation: 'run',
     mood: 'playful',
     lean: -8,
     hop: 20,
@@ -379,7 +379,7 @@ export const REACTION_SEQUENCES: Partial<Record<PetReactionId, PetMotionPhase[]>
     {
       at: 520,
       label: 'pounce_run',
-      animation: 'play',
+      animation: 'run',
       mood: 'playful',
       lean: -12,
       hop: 20,
