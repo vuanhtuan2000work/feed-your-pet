@@ -2,6 +2,7 @@ import { StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'
 import '../pet/petOverlay.css'
 import { PetOverlay } from '../app/PetOverlay'
+import { ACTIVE_TAB_KEY } from '../data/petConfig'
 
 const ROOT_ID = 'feed-your-pet-extension-root'
 const ENABLED_SITES_KEY = 'feed-your-pet:enabled-sites'
@@ -35,6 +36,10 @@ function normalizeHost(hostname: string) {
   return hostname.replace(/^www\./, '').toLowerCase()
 }
 
+function isHostEnabled(currentHost: string, enabledHost: string) {
+  return currentHost === enabledHost || currentHost.endsWith(`.${enabledHost}`)
+}
+
 async function isCurrentSiteEnabled() {
   const storage = (globalThis as ChromeRuntimeGlobal).chrome?.storage?.local
   if (!storage) {
@@ -48,7 +53,10 @@ async function isCurrentSiteEnabled() {
 
   const result = await storage.get(ENABLED_SITES_KEY)
   const enabledSites = result[ENABLED_SITES_KEY]
-  return Array.isArray(enabledSites) && enabledSites.includes(currentHost)
+  return (
+    Array.isArray(enabledSites) &&
+    enabledSites.some((site) => typeof site === 'string' && isHostEnabled(currentHost, site))
+  )
 }
 
 function mountPetOverlay() {
@@ -66,6 +74,11 @@ function mountPetOverlay() {
       <PetOverlay />
     </StrictMode>,
   )
+}
+
+function activatePetOverlay() {
+  window.localStorage.removeItem(ACTIVE_TAB_KEY)
+  mountPetOverlay()
 }
 
 async function mountIfEnabled() {
@@ -89,7 +102,7 @@ if (petWindow.__feedYourPetContentLoaded) {
 
   ;(globalThis as ChromeRuntimeGlobal).chrome?.runtime?.onMessage?.addListener((message) => {
     if (message.type === 'FEED_YOUR_PET_ENABLE_SITE') {
-      void mountIfEnabled()
+      activatePetOverlay()
     }
   })
 }

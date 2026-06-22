@@ -54,9 +54,9 @@ async function readEnabledSites() {
   return Array.isArray(result[ENABLED_SITES_KEY]) ? result[ENABLED_SITES_KEY] : []
 }
 
-async function enableSite(host) {
+async function enableSites(hosts) {
   const enabledSites = await readEnabledSites()
-  const nextSites = Array.from(new Set([...enabledSites, host])).sort()
+  const nextSites = Array.from(new Set([...enabledSites, ...hosts])).sort()
   await chrome.storage.local.set({ [ENABLED_SITES_KEY]: nextSites })
 }
 
@@ -91,18 +91,20 @@ async function hydrateInput() {
 form.addEventListener('submit', async (event) => {
   event.preventDefault()
   const tab = await getActiveTab()
-  const host = normalizeWebsite(input.value) ?? hostFromTab(tab)
+  const activeHost = hostFromTab(tab)
+  const inputHost = normalizeWebsite(input.value)
+  const host = inputHost ?? activeHost
 
-  if (!host) {
+  if (!activeHost || !host) {
     setStatus('Enter a valid website, for example github.com.', 'error')
     input.focus()
     return
   }
 
   try {
-    await enableSite(host)
+    await enableSites(host === activeHost ? [host] : [host, activeHost])
     await injectPet(tab)
-    setStatus(`Pet enabled on ${host}.`)
+    setStatus(`Pet enabled on ${activeHost}.`)
   } catch {
     setStatus('Could not enable pet on this page. Try refreshing the tab.', 'error')
   }
