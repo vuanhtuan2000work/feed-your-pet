@@ -11,8 +11,15 @@ import {
   readCursorOwner,
   type CursorOwnerEvent,
 } from '../services/tabTravelSync'
+import {
+  playPetActionSound,
+  playPetReactionSound,
+  startPetSleepLoop,
+  stopPetSleepLoop,
+} from '../services/petSounds'
 import type { PetAnimationKey } from '../game/assets/manifest'
 import type { PetHideAnchor } from '../game/phaser/adapters/sceneBridge'
+import type { PetActionId } from '../types/pet'
 
 const WIDGET_SIZE = 220
 const CHASE_DISTANCE = 96
@@ -24,6 +31,8 @@ const FREE_ROAM_MAX_TRAVEL_MS = 7_200
 const TAB_ID = CURRENT_TAB_ID
 const ACTIVE_TAB_TTL_MS = 2_500
 const HIDE_ANCHOR_SCAN_MS = 600
+const SLEEP_LOOP_CURL_START_MS = 900
+const INITIAL_CURSOR_EVENT_GRACE_MS = 800
 const HIDE_ANCHOR_MIN_WIDTH = 32
 const HIDE_ANCHOR_MIN_HEIGHT = 24
 const HIDE_ANCHOR_SELECTOR = [
@@ -123,6 +132,20 @@ function getRandomWidgetPosition(size: { width: number; height: number }) {
   return clampWidgetPosition({ x, y }, size)
 }
 
+function getDefaultWidgetPosition() {
+  return {
+    x: window.innerWidth - WIDGET_SIZE - 24,
+    y: window.innerHeight - WIDGET_SIZE - 24,
+  }
+}
+
+function getInitialWidgetPosition(
+  savedPosition: WidgetPosition | undefined,
+  size: { width: number; height: number },
+) {
+  return clampWidgetPosition(savedPosition ?? getDefaultWidgetPosition(), size)
+}
+
 function getRandomRoamTravelMs(distance: number, speedPxPerSecond: number) {
   return clamp(
     (distance / Math.max(1, speedPxPerSecond)) * 1_000,
@@ -186,6 +209,24 @@ function isCurrentCursorOwnerEvent(event: CursorOwnerEvent) {
 
 function isMouseInput(event: CursorEventLike) {
   return !('pointerType' in event) || event.pointerType === 'mouse'
+}
+
+function isRealCursorMove(event: CursorEventLike, mountedAtMs: number) {
+  if (event.type !== 'pointermove' && event.type !== 'mousemove') {
+    return false
+  }
+
+  if (
+    Date.now() - mountedAtMs < INITIAL_CURSOR_EVENT_GRACE_MS &&
+    'movementX' in event &&
+    'movementY' in event &&
+    event.movementX === 0 &&
+    event.movementY === 0
+  ) {
+    return false
+  }
+
+  return true
 }
 
 function getRectIntersection(first: DOMRect, second: DOMRect) {
@@ -275,7 +316,9 @@ export function PetWidget() {
   const ownerTabRef = useRef<string | undefined>(undefined)
   const cursorOwnerSignatureRef = useRef<string | undefined>(undefined)
   const hideAnchorSignatureRef = useRef('')
+  const reactionSoundSignatureRef = useRef<string | undefined>(undefined)
   const cursorIdleTimerRef = useRef<number | undefined>(undefined)
+  const mountedAtRef = useRef(0)
   const viewportRef = useRef({
     width: window.innerWidth,
     height: window.innerHeight,
@@ -284,9 +327,9 @@ export function PetWidget() {
   const menuOpen = usePetStore((store) => store.menuOpen)
   const setMenuOpen = usePetStore((store) => store.setMenuOpen)
   const performAction = usePetStore((store) => store.performAction)
-  const selectCatVariant = usePetStore((store) => store.selectCatVariant)
   const tick = usePetStore((store) => store.tick)
   const setPosition = usePetStore((store) => store.setPosition)
+  const setWidgetPosition = usePetStore((store) => store.setWidgetPosition)
   const hydrateRemote = usePetStore((store) => store.hydrateRemote)
   const [cursor, setCursor] = useState({
     x: window.innerWidth - 134,
@@ -294,14 +337,16 @@ export function PetWidget() {
     active: false,
   })
   const [petVisible, setPetVisible] = useState(shouldOwnPetInitially)
-  const [chasePosition, setChasePosition] = useState({
-    x: window.innerWidth - WIDGET_SIZE - 24,
-    y: window.innerHeight - WIDGET_SIZE - 24,
-  })
   const [widgetSize, setWidgetSize] = useState({
     width: WIDGET_SIZE,
     height: WIDGET_SIZE,
   })
+  const [chasePosition, setChasePosition] = useState(() =>
+    getInitialWidgetPosition(state.widgetPosition, {
+      width: WIDGET_SIZE,
+      height: WIDGET_SIZE,
+    }),
+  )
   const [petRenderNonce, setPetRenderNonce] = useState(0)
   const [hideAnchors, setHideAnchors] = useState<PetHideAnchor[]>([])
   const [freeRoamAnimation, setFreeRoamAnimation] =
@@ -435,6 +480,53 @@ export function PetWidget() {
     const interval = window.setInterval(tick, 1_000)
     return () => window.clearInterval(interval)
   }, [tick])
+
+  useEffect(() => {
+    setWidgetPosition(chasePosition.x, chasePosition.y)
+  }, [chasePosition.x, chasePosition.y, setWidgetPosition])
+
+  useEffect(() => {
+    if (state.currentReaction?.id === 'curl_sleep') {
+      return
+    }
+
+    if (state.state === 'sleep') {
+      startPetSleepLoop()
+      return
+    }
+
+    stopPetSleepLoop()
+  }, [state.currentReaction?.id, state.state])
+
+  useEffect(() => {
+    const reaction = state.currentReaction
+    if (reaction?.id !== 'curl_sleep') {
+      return
+    }
+
+    stopPetSleepLoop()
+    const elapsedMs = Math.max(0, Date.now() - reaction.startedAt)
+    const delayMs = Math.max(0, SLEEP_LOOP_CURL_START_MS - elapsedMs)
+    const timeout = window.setTimeout(startPetSleepLoop, delayMs)
+
+    return () => window.clearTimeout(timeout)
+  }, [state.currentReaction])
+
+  useEffect(() => {
+    const reaction = state.currentReaction
+    if (!reaction) {
+      reactionSoundSignatureRef.current = undefined
+      return
+    }
+
+    const signature = `${reaction.id}:${reaction.startedAt}`
+    if (reactionSoundSignatureRef.current === signature) {
+      return
+    }
+
+    reactionSoundSignatureRef.current = signature
+    playPetReactionSound(reaction.id)
+  }, [state.currentReaction])
 
   useEffect(() => {
     if (!petVisible) {
@@ -579,8 +671,14 @@ export function PetWidget() {
   }, [chasePosition.x, chasePosition.y, refreshHideAnchors, widgetSize.height, widgetSize.width])
 
   useEffect(() => {
+    mountedAtRef.current = Date.now()
+
     const onPointerMove = (event: CursorEventLike) => {
       if (!isMouseInput(event)) {
+        return
+      }
+
+      if (!isRealCursorMove(event, mountedAtRef.current)) {
         return
       }
 
@@ -602,15 +700,11 @@ export function PetWidget() {
 
     window.addEventListener('pointermove', onPointerMove, { passive: true })
     window.addEventListener('mousemove', onPointerMove, { passive: true })
-    window.addEventListener('mouseover', onPointerMove, { passive: true })
-    window.addEventListener('mouseenter', onPointerMove)
     window.addEventListener('pointerleave', deactivateCursor)
     window.addEventListener('blur', deactivateCursor)
     return () => {
       window.removeEventListener('pointermove', onPointerMove)
       window.removeEventListener('mousemove', onPointerMove)
-      window.removeEventListener('mouseover', onPointerMove)
-      window.removeEventListener('mouseenter', onPointerMove)
       window.removeEventListener('pointerleave', deactivateCursor)
       window.removeEventListener('blur', deactivateCursor)
       window.clearTimeout(cursorIdleTimerRef.current)
@@ -768,6 +862,14 @@ export function PetWidget() {
     setMenuOpen(!menuOpen)
   }, [menuOpen, setMenuOpen])
 
+  const handleAction = useCallback(
+    (action: PetActionId) => {
+      playPetActionSound(action)
+      performAction(action)
+    },
+    [performAction],
+  )
+
   const handlePositionChange = useCallback(
     (x: number, y: number) => {
       setPosition(x, y)
@@ -794,9 +896,7 @@ export function PetWidget() {
       <PetMenu
         open={menuOpen}
         petState={state.state}
-        selectedCatVariantId={state.catVariantId}
-        onAction={performAction}
-        onSelectCatVariant={selectCatVariant}
+        onAction={handleAction}
       />
       <PetCanvas
         key={petRenderNonce}

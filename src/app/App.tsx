@@ -1,11 +1,9 @@
-import { PetWidget } from '../pet/PetWidget'
-import { MouseCursor } from '../pet/MouseCursor'
+import { PetOverlay } from './PetOverlay'
 
 export default function App() {
   return (
     <main className="demo-page">
-      <MouseCursor />
-      <PetWidget />
+      <PetOverlay />
     </main>
   )
 }

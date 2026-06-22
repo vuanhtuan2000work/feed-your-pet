@@ -10,6 +10,7 @@ export type PetMotionProfile = {
   hop: number
   squash: number
   settleMs: number
+  animationTimeScale?: number
 }
 
 export type PetMotionPhase = PetMotionProfile & {
@@ -136,7 +137,7 @@ export const REACTION_MOTIONS: Record<PetReactionId, PetMotionProfile> = {
     lean: -9,
     hop: 7,
     squash: 0.1,
-    settleMs: 260,
+    settleMs: 520,
   },
   sleepy_refuse_wake: {
     animation: 'sleep',
@@ -176,75 +177,57 @@ export const REACTION_SEQUENCES: Partial<Record<PetReactionId, PetMotionPhase[]>
   curl_sleep: [
     {
       at: 0,
-      label: 'notice_safe_place',
-      animation: 'pet_head',
-      mood: 'sleepy',
-      lean: 1,
-      hop: 0,
-      squash: 0.03,
-      settleMs: 420,
-    },
-    {
-      at: 900,
       label: 'turn_into_loaf',
       animation: 'sleep',
       mood: 'sleepy',
-      lean: -2,
+      lean: 0,
       hop: 0,
-      squash: 0.05,
-      settleMs: 520,
+      squash: 0.035,
+      settleMs: 10000,
     },
     {
-      at: 2_200,
+      at: 1_600,
       label: 'deep_sleep_breathing',
       animation: 'sleep',
       mood: 'sleepy',
       lean: 0,
       hop: 0,
       squash: 0.015,
-      settleMs: 680,
+      settleMs: 1000,
     },
   ],
   wake_stretch: [
     {
       at: 0,
-      label: 'sleepy_notice',
-      animation: 'sleep',
-      mood: 'sleepy',
-      lean: 0,
-      hop: 0,
-      squash: 0.02,
-      settleMs: 420,
-    },
-    {
-      at: 750,
       label: 'slow_stretch',
       animation: 'happy',
       mood: 'soft',
       lean: -12,
       hop: 4,
       squash: 0.12,
-      settleMs: 680,
+      settleMs: 2_300,
+      animationTimeScale: 0.18,
     },
     {
-      at: 1_800,
+      at: 4_600,
       label: 'shake_off_sleep',
       animation: 'play',
       mood: 'playful',
       lean: 8,
       hop: 10,
       squash: 0.07,
-      settleMs: 260,
+      settleMs: 620,
+      animationTimeScale: 0.55,
     },
     {
-      at: 2_650,
+      at: 5_800,
       label: 'soft_settle',
       animation: 'idle',
       mood: 'soft',
       lean: 0,
       hop: 0,
       squash: 0.018,
-      settleMs: 500,
+      settleMs: 900,
     },
   ],
   sleepy_refuse_wake: [

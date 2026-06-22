@@ -1,6 +1,7 @@
 import { CURSOR_OWNER_KEY, TAB_TRAVEL_CHANNEL } from '../data/petConfig'
 
 export const CURRENT_TAB_ID = crypto.randomUUID()
+const CURSOR_OWNER_TTL_MS = 2_500
 
 export type TravelEdge = 'left' | 'right' | 'top' | 'bottom'
 
@@ -133,7 +134,16 @@ export function readCursorOwner() {
 
   try {
     const owner = JSON.parse(raw) as CursorOwnerEvent
-    return owner.type === 'PET_CURSOR_OWNER' ? owner : null
+    if (owner.type !== 'PET_CURSOR_OWNER') {
+      return null
+    }
+
+    if (Date.now() - owner.timestamp > CURSOR_OWNER_TTL_MS) {
+      window.localStorage.removeItem(CURSOR_OWNER_KEY)
+      return null
+    }
+
+    return owner
   } catch {
     return null
   }

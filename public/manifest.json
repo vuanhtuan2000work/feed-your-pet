@@ -1,0 +1,30 @@
+{
+  "manifest_version": 3,
+  "name": "Feed Your Pet",
+  "description": "A tiny animated pet companion that lives on top of your webpages.",
+  "version": "0.1.0",
+  "permissions": ["activeTab", "scripting", "storage"],
+  "action": {
+    "default_title": "Feed Your Pet",
+    "default_popup": "popup.html"
+  },
+  "content_scripts": [
+    {
+      "matches": ["<all_urls>"],
+      "js": ["content.js"],
+      "css": ["content.css"],
+      "run_at": "document_idle"
+    }
+  ],
+  "web_accessible_resources": [
+    {
+      "resources": [
+        "assets/cursor/*",
+        "assets/pet/cat_actions/run/4-Balinese-lengend/*",
+        "assets/pet/cat_actions/sleep/4-Balinese-lengend/*",
+        "assets/pet/sound/*/*"
+      ],
+      "matches": ["<all_urls>"]
+    }
+  ]
+}

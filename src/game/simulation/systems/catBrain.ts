@@ -48,10 +48,11 @@ export function decideReaction(
     pet.memory.pettingCountInShortTime >
     Math.max(2, Math.round(pet.personality.tolerance / 22))
 
-  if (
-    pet.state === 'sleep' &&
-    (action === 'wake_up' || action === 'pet_head' || action === 'feed')
-  ) {
+  if (pet.state === 'sleep' && action === 'wake_up') {
+    return decision('wake_stretch', 'happy', 'playful', 7_000)
+  }
+
+  if (pet.state === 'sleep' && (action === 'pet_head' || action === 'feed')) {
     return decision('zoomies', 'run', 'playful', 22_000)
   }
 

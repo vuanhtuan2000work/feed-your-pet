@@ -66,6 +66,22 @@ function normalizeMemory(memory: Partial<PetMemory> | undefined): PetMemory {
   }
 }
 
+function normalizePosition(position: Partial<PetSaveState['position']> | undefined) {
+  if (
+    typeof position?.x !== 'number' ||
+    typeof position.y !== 'number' ||
+    !Number.isFinite(position.x) ||
+    !Number.isFinite(position.y)
+  ) {
+    return undefined
+  }
+
+  return {
+    x: Math.round(position.x),
+    y: Math.round(position.y),
+  }
+}
+
 export function normalizePetState(
   state: Partial<PetSaveState> | null,
   deviceId: string,
@@ -92,7 +108,8 @@ export function normalizePetState(
     boredom: clampStat(state.boredom ?? fallback.boredom),
     cleanliness: clampStat(state.cleanliness ?? fallback.cleanliness),
     stress: clampStat(state.stress ?? fallback.stress),
-    position: state.position ?? fallback.position,
+    position: normalizePosition(state.position) ?? fallback.position,
+    widgetPosition: normalizePosition(state.widgetPosition),
     personality: normalizePersonality(state.personality),
     memory: normalizeMemory(state.memory),
     updatedAt: new Date().toISOString(),
@@ -122,6 +139,7 @@ export function toSaveState(state: PetRuntimeState): PetSaveState {
     lastPetAt: state.lastPetAt,
     lastOpenedAt: state.lastOpenedAt,
     position: state.position,
+    widgetPosition: state.widgetPosition,
     personality: state.personality,
     memory: state.memory,
     createdAt: state.createdAt,

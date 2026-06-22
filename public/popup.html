@@ -1,0 +1,28 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Feed Your Pet</title>
+    <link rel="stylesheet" href="./popup.css" />
+  </head>
+  <body>
+    <form id="pet-site-form" class="popup-shell">
+      <label class="popup-label" for="pet-site-input">Activate pet on website</label>
+      <input
+        id="pet-site-input"
+        class="popup-input"
+        name="website"
+        type="text"
+        placeholder="Enter a website where you want your pet to appear"
+        autocomplete="off"
+      />
+      <p id="popup-status" class="popup-status" role="status"></p>
+      <div class="popup-actions">
+        <button class="popup-button popup-button--primary" type="submit">Add</button>
+        <button id="cancel-button" class="popup-button" type="button">Cancel</button>
+      </div>
+    </form>
+    <script src="./popup.js"></script>
+  </body>
+</html>

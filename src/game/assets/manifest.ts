@@ -3,7 +3,7 @@ import {
   DEFAULT_CAT_VARIANT_ID,
   type CatVariantId,
 } from '../../data/catVariants'
-import type { PetType } from '../../types/pet'
+import { getAssetUrl } from '../../services/assetUrl'
 
 export type PetAnimationKey =
   | 'idle'
@@ -25,7 +25,6 @@ export type PetAnimationKey =
   | 'play'
   | 'dream'
   | 'attention'
-  | 'cat_type'
 
 export type PetFrameAsset = {
   key: string
@@ -47,7 +46,7 @@ export type PetAnimationAsset = {
 }
 
 export type PetAssetManifest = {
-  petType: PetType
+  petType: 'cat'
   variantId?: CatVariantId
   enabled: boolean
   sources: Array<{
@@ -79,7 +78,6 @@ const rates: Record<PetAnimationKey, number> = {
   play: 10,
   dream: 6,
   attention: 5,
-  cat_type: 3,
 }
 
 const repeats: Record<PetAnimationKey, number> = {
@@ -102,10 +100,13 @@ const repeats: Record<PetAnimationKey, number> = {
   play: 0,
   dream: 0,
   attention: -1,
-  cat_type: -1,
 }
 
 const RUN_FRAME_COUNT = 4
+const SLEEP_FRAME_ORDER = [
+  { sheetNumber: 1, frameNumber: 4 },
+  { sheetNumber: 2, frameNumber: 4 },
+] as const
 
 const runSourceDirections = {
   run_down: { fileNumber: 1, sourceSlug: 'down' },
@@ -128,7 +129,9 @@ function getCatRunSource(variantId: CatVariantId, sourceKey: RunSourceKey) {
   const direction = runSourceDirections[sourceKey]
   return {
     key: `${variant.id}:cat-actions:run:${direction.sourceSlug}`,
-    url: `/assets/pet/cat_actions/run/${variant.runFolder}/${direction.fileNumber}-${variant.runFileStem}.png`,
+    url: getAssetUrl(
+      `assets/pet/cat_actions/run/${variant.runFolder}/${direction.fileNumber}-${variant.runFileStem}.png`,
+    ),
   }
 }
 
@@ -142,7 +145,9 @@ function getCatSleepSources(variantId: CatVariantId) {
     const sheetNumber = index + 1
     return {
       key: `${variant.id}:cat-actions:sleep:${sheetNumber}`,
-      url: `/assets/pet/cat_actions/sleep/${variant.runFolder}/${sheetNumber}-${variant.runFileStem}.png`,
+      url: getAssetUrl(
+        `assets/pet/cat_actions/sleep/${variant.runFolder}/${sheetNumber}-${variant.runFileStem}.png`,
+      ),
     }
   })
 }
@@ -233,20 +238,18 @@ function makeSleepFrames(variantId: CatVariantId): PetFrameAsset[] {
     return makeRunFrames(variantId, 'run_up', [2])
   }
 
-  return Array.from({ length: variant.sleepSheetCount }).flatMap((_, sheetIndex) => {
-    const sheetNumber = sheetIndex + 1
+  return SLEEP_FRAME_ORDER.filter(
+    ({ sheetNumber, frameNumber }) =>
+      sheetNumber <= variant.sleepSheetCount && frameNumber <= variant.sleepFrameCount,
+  ).map(({ sheetNumber, frameNumber }) => {
     const textureKey = `${variant.id}:cat-actions:sleep:${sheetNumber}`
-
-    return Array.from({ length: variant.sleepFrameCount }, (_, frameIndex) => {
-      const frameNumber = frameIndex + 1
-      const frameId = String(frameNumber).padStart(3, '0')
-      return {
-        key: `${textureKey}:${frameId}`,
-        textureKey,
-        frame: `${variant.id}:sleep:${sheetNumber}:${frameId}`,
-        rect: getSleepFrameRect(variantId, sheetNumber, frameNumber),
-      }
-    })
+    const frameId = String(frameNumber).padStart(3, '0')
+    return {
+      key: `${textureKey}:${frameId}`,
+      textureKey,
+      frame: `${variant.id}:sleep:${sheetNumber}:${frameId}`,
+      rect: getSleepFrameRect(variantId, sheetNumber, frameNumber),
+    }
   })
 }
 
@@ -271,7 +274,6 @@ function makeCatActionSequences(variantId: CatVariantId): Record<PetAnimationKey
     play: makeRunFrames(variantId, 'run_right'),
     dream: makeRunFrames(variantId, 'run_up', [2, 3, 2]),
     attention: makeRunFrames(variantId, 'run_down', [1, 2, 3, 4]),
-    cat_type: makeRunFrames(variantId, 'run_down', [2, 3, 2]),
   }
 }
 
@@ -305,25 +307,6 @@ function makeCatManifest(variantId: CatVariantId): PetAssetManifest {
   }
 }
 
-function makeDisabledManifest(petType: PetType): PetAssetManifest {
-  const animations = {} as Record<PetAnimationKey, PetAnimationAsset>
-  ;(Object.keys(rates) as PetAnimationKey[]).forEach((key) => {
-    animations[key] = {
-      key: `${petType}:${key}`,
-      frameRate: rates[key],
-      repeat: repeats[key],
-      frames: [],
-    }
-  })
-
-  return {
-    petType,
-    enabled: false,
-    sources: [],
-    animations,
-  }
-}
-
 export const CAT_VARIANT_MANIFESTS = Object.fromEntries(
   CAT_VARIANTS.map((variant) => [variant.id, makeCatManifest(variant.id)]),
 ) as Record<CatVariantId, PetAssetManifest>
@@ -333,9 +316,4 @@ export function getCatAssetManifest(variantId?: CatVariantId | string) {
     CAT_VARIANT_MANIFESTS[variantId as CatVariantId] ??
     CAT_VARIANT_MANIFESTS[DEFAULT_CAT_VARIANT_ID]
   )
-}
-
-export const PET_MANIFESTS: Record<PetType, PetAssetManifest> = {
-  cat: getCatAssetManifest(),
-  dog: makeDisabledManifest('dog'),
 }

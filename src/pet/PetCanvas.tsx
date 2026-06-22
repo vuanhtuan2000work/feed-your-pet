@@ -86,5 +86,12 @@ export function PetCanvas({
     return () => game.destroy(true)
   }, [])
 
-  return <div ref={hostRef} className="pet-canvas" aria-label="Pet companion" />
+  return (
+    <div
+      ref={hostRef}
+      className="pet-canvas"
+      aria-label="Pet companion"
+      onPointerDown={() => onPetClickRef.current()}
+    />
+  )
 }

@@ -6,6 +6,7 @@ import {
   readCursorOwner,
   type CursorOwnerEvent,
 } from '../services/tabTravelSync'
+import { getAssetUrl } from '../services/assetUrl'
 
 type CursorPoint = {
   x: number
@@ -24,6 +25,7 @@ const MOUSE_IDLE_FRAME_INDEX = 5
 const MOUSE_IDLE_DELAY_MS = 260
 const MOUSE_MOVEMENT_THRESHOLD = 2
 const MOUSE_RUN_FRAME_MS = 96
+const INITIAL_CURSOR_EVENT_GRACE_MS = 800
 
 function isControlTarget(target: EventTarget | null) {
   if (!(target instanceof HTMLElement)) {
@@ -92,6 +94,7 @@ function getMouseRunFrameSequence(frameIndex: number) {
 
 export function MouseCursor() {
   const lastPositionRef = useRef<CursorPosition | undefined>(undefined)
+  const mountedAtRef = useRef(0)
   const idleTimerRef = useRef<number | undefined>(undefined)
   const runTimerRef = useRef<number | undefined>(undefined)
   const runSequenceKeyRef = useRef<number | undefined>(undefined)
@@ -106,6 +109,8 @@ export function MouseCursor() {
   })
 
   useEffect(() => {
+    mountedAtRef.current = Date.now()
+
     const cursorSync = createTabTravelBroadcast((event) => {
       if (event.type === 'PET_CURSOR_OWNER' && !isCurrentCursorOwnerEvent(event)) {
         return
@@ -191,6 +196,16 @@ export function MouseCursor() {
         return
       }
 
+      if (
+        Date.now() - mountedAtRef.current < INITIAL_CURSOR_EVENT_GRACE_MS &&
+        'movementX' in event &&
+        'movementY' in event &&
+        event.movementX === 0 &&
+        event.movementY === 0
+      ) {
+        return
+      }
+
       const frameIndex = updateMovementFrame(event)
       claimCursor(event)
       setCursor((current) => ({
@@ -221,22 +236,6 @@ export function MouseCursor() {
         frameIndex: MOUSE_IDLE_FRAME_INDEX,
       }))
     }
-    const enter = (event: CursorEventLike) => {
-      if (!isMouseInput(event)) {
-        return
-      }
-
-      lastPositionRef.current = { x: event.clientX, y: event.clientY }
-      claimCursor(event)
-      setCursor((current) => ({
-        ...current,
-        x: event.clientX,
-        y: event.clientY,
-        visible: true,
-        overControl: isControlTarget(event.target),
-        frameIndex: MOUSE_IDLE_FRAME_INDEX,
-      }))
-    }
     const hideWhenInactive = () => {
       if (document.visibilityState !== 'visible') {
         window.clearTimeout(idleTimerRef.current)
@@ -253,27 +252,21 @@ export function MouseCursor() {
 
     window.addEventListener('pointermove', move, { passive: true })
     window.addEventListener('mousemove', move, { passive: true })
-    window.addEventListener('mouseover', enter, { passive: true })
     window.addEventListener('pointerdown', down)
     window.addEventListener('mousedown', down)
     window.addEventListener('pointerup', up)
     window.addEventListener('mouseup', up)
     window.addEventListener('pointerleave', leave)
-    window.addEventListener('pointerenter', enter)
-    window.addEventListener('mouseenter', enter)
     window.addEventListener('blur', leave)
     document.addEventListener('visibilitychange', hideWhenInactive)
     return () => {
       window.removeEventListener('pointermove', move)
       window.removeEventListener('mousemove', move)
-      window.removeEventListener('mouseover', enter)
       window.removeEventListener('pointerdown', down)
       window.removeEventListener('mousedown', down)
       window.removeEventListener('pointerup', up)
       window.removeEventListener('mouseup', up)
       window.removeEventListener('pointerleave', leave)
-      window.removeEventListener('pointerenter', enter)
-      window.removeEventListener('mouseenter', enter)
       window.removeEventListener('blur', leave)
       document.removeEventListener('visibilitychange', hideWhenInactive)
       window.clearTimeout(idleTimerRef.current)
@@ -303,6 +296,7 @@ export function MouseCursor() {
       <span
         className="mouse-cursor__sprite"
         style={{
+          backgroundImage: `url("${getAssetUrl('assets/cursor/mouse-run.png')}")`,
           backgroundPosition: `-${cursor.frameIndex * MOUSE_FRAME_SIZE}px 0`,
         }}
       />

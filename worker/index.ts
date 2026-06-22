@@ -1,6 +1,7 @@
 type PetActionId =
   | 'feed'
   | 'pet_head'
+  | 'follow_cursor'
   | 'cheek'
   | 'play'
   | 'sleep'
@@ -306,6 +307,14 @@ function applyAction(state: PetSaveState, action: PetActionId): PetSaveState {
     }
   }
 
+  if (action === 'follow_cursor') {
+    return {
+      ...next,
+      state: 'follow_cursor',
+      mood: 'attention',
+    }
+  }
+
   if (action === 'cheek') {
     return {
       ...next,
@@ -359,6 +368,7 @@ function isPetAction(action: unknown): action is PetActionId {
   return (
     action === 'feed' ||
     action === 'pet_head' ||
+    action === 'follow_cursor' ||
     action === 'cheek' ||
     action === 'play' ||
     action === 'sleep' ||

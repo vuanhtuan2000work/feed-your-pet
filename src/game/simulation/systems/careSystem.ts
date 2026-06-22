@@ -7,6 +7,17 @@ export function applyCareAction(
   action: PetActionId,
   nowMs = Date.now(),
 ): PetRuntimeState {
+  if (action === 'follow_cursor') {
+    return {
+      ...state,
+      state: 'follow_cursor',
+      mood: 'attention',
+      actionUntil: undefined,
+      currentReaction: undefined,
+      updatedAt: new Date(nowMs).toISOString(),
+    }
+  }
+
   if (
     state.state === 'sleep' &&
     action !== 'wake_up' &&

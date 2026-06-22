@@ -20,11 +20,13 @@ type PetStore = {
   selectCatVariant: (catVariantId: CatVariantId) => void
   tick: () => void
   setPosition: (x: number, y: number) => void
+  setWidgetPosition: (x: number, y: number) => void
   hydrateRemote: () => Promise<void>
 }
 
 const deviceId = getDeviceId()
 let lastPositionWriteAt = 0
+let lastWidgetPositionWriteAt = 0
 const broadcast = createPetBroadcast((event) => {
   usePetStore.getState().replaceFromBroadcast(event.state)
 })
@@ -86,6 +88,30 @@ export const usePetStore = create<
     const next = {
       ...current,
       position: { x, y },
+      updatedAt: new Date().toISOString(),
+    }
+    persist(next, false)
+    set({ state: next })
+  },
+  setWidgetPosition(x, y) {
+    const nowMs = Date.now()
+    if (nowMs - lastWidgetPositionWriteAt < 500) {
+      return
+    }
+    lastWidgetPositionWriteAt = nowMs
+
+    const current = get().state
+    const nextPosition = { x: Math.round(x), y: Math.round(y) }
+    if (
+      current.widgetPosition?.x === nextPosition.x &&
+      current.widgetPosition.y === nextPosition.y
+    ) {
+      return
+    }
+
+    const next = {
+      ...current,
+      widgetPosition: nextPosition,
       updatedAt: new Date().toISOString(),
     }
     persist(next, false)

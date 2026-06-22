@@ -1,21 +1,16 @@
 import { PET_ACTIONS, SLEEPING_PET_ACTIONS } from '../data/petActions'
-import { CAT_VARIANTS, getCatVariantPreviewUrl, type CatVariantId } from '../data/catVariants'
 import type { PetActionId, PetState } from '../types/pet'
 
 type PetMenuProps = {
   open: boolean
   petState: PetState
-  selectedCatVariantId: CatVariantId
   onAction: (action: PetActionId) => void
-  onSelectCatVariant: (catVariantId: CatVariantId) => void
 }
 
 export function PetMenu({
   open,
   petState,
-  selectedCatVariantId,
   onAction,
-  onSelectCatVariant,
 }: PetMenuProps) {
   if (!open) {
     return null
@@ -44,21 +39,6 @@ export function PetMenu({
           </button>
         )
       })}
-      <div className="pet-menu__variants" aria-label="Cat selector">
-        {CAT_VARIANTS.map((variant) => (
-          <button
-            key={variant.id}
-            type="button"
-            className="pet-menu__variant"
-            aria-pressed={selectedCatVariantId === variant.id}
-            title={variant.label}
-            onClick={() => onSelectCatVariant(variant.id)}
-          >
-            <img src={getCatVariantPreviewUrl(variant)} alt="" />
-            <span>{variant.label}</span>
-          </button>
-        ))}
-      </div>
     </div>
   )
 }

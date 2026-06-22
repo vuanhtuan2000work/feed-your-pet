@@ -73,7 +73,6 @@ const runFrameRectsByVariantId = {
     ],
   },
 }
-const sleepSheetCount = 3
 const sleepFrameCount = 4
 const sleepFrameRectsByVariantId = {
   balinese: [
@@ -138,6 +137,17 @@ async function fileExists(filePath) {
   } catch {
     return false
   }
+}
+
+async function countSleepSheets(root, variant) {
+  const sleepDir = path.join(root, catSleepDir, variant.runFolder)
+  const entries = await readdir(sleepDir, { withFileTypes: true }).catch(() => [])
+  return entries.filter(
+    (entry) =>
+      entry.isFile() &&
+      entry.name.endsWith('.png') &&
+      entry.name.endsWith(`-${variant.runFileStem}.png`),
+  ).length
 }
 
 function clampFrameRects(rects, sheetSize) {
@@ -221,6 +231,7 @@ export async function generateCatVariants({ root = defaultRoot } = {}) {
 
       if (await fileExists(sleepPreviewPath)) {
         const sleepSize = await readPngSize(sleepPreviewPath)
+        const sleepSheetCount = await countSleepSheets(root, variant)
         const sleepFrameRects = sleepFrameRectsByVariantId[variant.id]?.map((sheet) =>
           clampFrameRects(sheet, sleepSize),
         )

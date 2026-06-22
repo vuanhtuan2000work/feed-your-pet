@@ -20,6 +20,14 @@ npm run check
 
 `npm run check` builds the frontend, typechecks the Worker, and runs a Wrangler deploy dry-run.
 
+## Chrome extension
+
+```bash
+npm run build:extension
+```
+
+Open `chrome://extensions`, enable Developer mode, choose Load unpacked, and select `dist-extension`.
+
 ## Cloudflare
 
 1. Create a D1 database named `feed-your-pet-db`.
@@ -41,4 +49,4 @@ Set `VITE_PET_API_BASE_URL` for the frontend when you want it to sync with a Wor
 
 ## Asset notes
 
-The cat sprite sheet from Downloads has been split into named animation frames under `public/assets/pet/cat`. The dog sheet is stored in `public/assets/pet/_source/dog.png` and is intentionally disabled in the manifest until its animation frame map is authored.
+Runtime cat animation assets live under `public/assets/pet/cat_actions`, and pet sounds live under `public/assets/pet/sound`. The generated cat variant metadata is refreshed from the action folders during dev/build.

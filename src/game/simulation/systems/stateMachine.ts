@@ -31,6 +31,17 @@ export function resolveTimedState(
     }
   }
 
+  if (completedReaction === 'wake_stretch') {
+    return {
+      ...state,
+      actionUntil: undefined,
+      currentReaction: undefined,
+      state: 'run',
+      mood: 'playful',
+      updatedAt: new Date(nowMs).toISOString(),
+    }
+  }
+
   return {
     ...state,
     actionUntil: undefined,

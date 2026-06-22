@@ -254,7 +254,7 @@ export const GENERATED_CAT_VARIANTS = [
         }
       ]
     },
-    sleepSheetCount: 3,
+    sleepSheetCount: 2,
     sleepFrameCount: 4,
     sleepSheetWidth: 866,
     sleepSheetHeight: 288,

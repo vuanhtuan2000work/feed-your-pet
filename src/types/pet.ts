@@ -35,6 +35,7 @@ export type PetState =
 export type PetActionId =
   | 'feed'
   | 'pet_head'
+  | 'follow_cursor'
   | 'cheek'
   | 'play'
   | 'sleep'
@@ -115,6 +116,7 @@ export type PetSaveState = PetStats & {
   lastPetAt?: string
   lastOpenedAt: string
   position: PetPosition
+  widgetPosition?: PetPosition
   personality: PetPersonality
   memory: PetMemory
   createdAt: string

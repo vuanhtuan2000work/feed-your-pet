@@ -17,7 +17,3 @@ export function getCatVariant(variantId?: CatVariantId | string) {
     CAT_VARIANTS[0]
   )
 }
-
-export function getCatVariantPreviewUrl(variant: (typeof CAT_VARIANTS)[number]) {
-  return `/assets/pet/cat_actions/run/${variant.runFolder}/1-${variant.runFileStem}.png`
-}

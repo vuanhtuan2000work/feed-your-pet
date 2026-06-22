@@ -44,10 +44,13 @@ type FrameContentBounds = {
 
 const FOLLOW_POINTER_MOVE_THRESHOLD = 2.5
 const FOLLOW_IDLE_DELAY_MS = 300
-const FOLLOW_RUN_MAX_TILT = 0.36
+const FOLLOW_RUN_MAX_TILT = 0.22
+const FOLLOW_RUN_TILT_NEAR_DISTANCE = 34
+const FOLLOW_RUN_TILT_FULL_DISTANCE = 96
 const FOLLOW_HORIZONTAL_DEADZONE_RATIO = 0.18
 const FOLLOW_VERTICAL_DEADZONE_RATIO = 0.12
 const PET_DEPTH = 10
+const PET_CANVAS_SAFE_MARGIN = 8
 const CONTENT_ALPHA_THRESHOLD = 64
 const CONTENT_DENSE_PROJECTION_RATIO = 0.1
 const CONTENT_VISUAL_MAJOR_WEIGHT = 0.82
@@ -113,9 +116,6 @@ export class PetScene extends Phaser.Scene {
       .setDepth(PET_DEPTH)
     this.syncFrameScale()
     this.pet.setScale(this.baseScale)
-    this.pet.setInteractive({ useHandCursor: true })
-
-    this.pet.on('pointerdown', () => this.bridge.onPetClick())
     this.input.on('pointermove', (pointer: Phaser.Input.Pointer) => {
       this.lastPointerX = pointer.x
     })
@@ -129,6 +129,10 @@ export class PetScene extends Phaser.Scene {
 
     const state = this.bridge.getState()
     const forcedAnimation = this.bridge.getForcedAnimation()
+    const isStableSleeping =
+      state.state === 'sleep' &&
+      !state.currentReaction &&
+      !forcedAnimation
     if (!state.currentReaction) {
       this.currentReactionId = undefined
       this.currentReactionPhase = undefined
@@ -164,17 +168,19 @@ export class PetScene extends Phaser.Scene {
       if (state.state === 'play') {
         this.playBounce(delta, state.currentReaction.id === 'zoomies' ? 1 : 0.45)
       }
-    } else if (state.state === 'sleep') {
-      this.playAnimation('sleep')
-      this.syncFrameScale()
-      this.pet.setScale(this.baseScale)
-      this.pet.setRotation(0)
+    } else if (isStableSleeping) {
+      this.showStableSleepPose()
     } else {
       this.liveIdle(time, delta)
     }
 
     this.updatePageOcclusionMask()
+    if (isStableSleeping) {
+      return
+    }
+
     this.applyPointerGaze()
+    this.keepPetWithinCanvas()
     this.bridge.onPositionChange(Math.round(this.pet.x), Math.round(this.pet.y))
   }
 
@@ -275,16 +281,42 @@ export class PetScene extends Phaser.Scene {
 
     const animation = this.getCurrentCatManifest().animations[key]
     if (this.currentAnimation === animation.key) {
+      this.pet.anims.timeScale = 1
       return
     }
 
     this.currentAnimation = animation.key
     this.currentAnimationKey = key
     this.pet.play(animation.key)
+    this.pet.anims.timeScale = 1
     this.syncFrameScale()
     this.pet.setScale(this.baseScale)
     if (this.isDirectionalRunAnimation()) {
       this.pet.setFlipX(false)
+    }
+  }
+
+  private showStableSleepPose() {
+    if (!this.pet) {
+      return
+    }
+
+    const animation = this.getCurrentCatManifest().animations.sleep
+    const finalFrame = animation.frames.at(-1)
+    if (!finalFrame) {
+      this.playAnimation('sleep')
+      return
+    }
+
+    const stableAnimationKey = `${animation.key}:stable`
+    if (this.currentAnimation !== stableAnimationKey) {
+      this.currentAnimation = stableAnimationKey
+      this.currentAnimationKey = 'sleep'
+      this.pet.stop()
+      this.pet.setTexture(finalFrame.textureKey, finalFrame.frame)
+      this.syncFrameScale()
+      this.pet.setScale(this.baseScale)
+      this.pet.setRotation(0)
     }
   }
 
@@ -397,10 +429,21 @@ export class PetScene extends Phaser.Scene {
       return 0
     }
 
+    const distance = Math.hypot(dx, dy)
+    if (distance <= FOLLOW_RUN_TILT_NEAR_DISTANCE) {
+      return 0
+    }
+
+    const distanceFactor = Phaser.Math.Clamp(
+      (distance - FOLLOW_RUN_TILT_NEAR_DISTANCE) /
+        (FOLLOW_RUN_TILT_FULL_DISTANCE - FOLLOW_RUN_TILT_NEAR_DISTANCE),
+      0,
+      1,
+    )
     const tiltMagnitude = Math.min(
       FOLLOW_RUN_MAX_TILT,
       Math.atan2(absY, absX) * 0.45,
-    )
+    ) * distanceFactor
 
     if (animation === 'run_up_left' || animation === 'run_down_right') {
       return dy < 0 ? tiltMagnitude : tiltMagnitude
@@ -655,6 +698,7 @@ export class PetScene extends Phaser.Scene {
     const phase = this.getReactionPhase(reactionId, elapsedMs)
     const profile = phase ?? REACTION_MOTIONS[reactionId]
     this.playAnimation(profile.animation)
+    this.pet.anims.timeScale = profile.animationTimeScale ?? 1
     this.applyAmbientMotion(this.time.now, profile.mood)
 
     const phaseKey = phase ? `${reactionId}:${phase.label}` : reactionId
@@ -912,6 +956,30 @@ export class PetScene extends Phaser.Scene {
 
     this.pet.setFlipX(dx < 0)
     this.pet.setRotation(Phaser.Math.Linear(this.pet.rotation, targetRotation, 0.38))
+  }
+
+  private keepPetWithinCanvas() {
+    if (!this.pet) {
+      return
+    }
+
+    const bounds = this.pet.getBounds()
+    let nextX = this.pet.x
+    let nextY = this.pet.y
+
+    if (bounds.left < PET_CANVAS_SAFE_MARGIN) {
+      nextX += PET_CANVAS_SAFE_MARGIN - bounds.left
+    } else if (bounds.right > WIDGET_SIZE - PET_CANVAS_SAFE_MARGIN) {
+      nextX -= bounds.right - (WIDGET_SIZE - PET_CANVAS_SAFE_MARGIN)
+    }
+
+    if (bounds.top < PET_CANVAS_SAFE_MARGIN) {
+      nextY += PET_CANVAS_SAFE_MARGIN - bounds.top
+    } else if (bounds.bottom > WIDGET_SIZE - PET_CANVAS_SAFE_MARGIN) {
+      nextY -= bounds.bottom - (WIDGET_SIZE - PET_CANVAS_SAFE_MARGIN)
+    }
+
+    this.pet.setPosition(nextX, nextY)
   }
 
   private playBounce(delta: number, intensity: number) {
