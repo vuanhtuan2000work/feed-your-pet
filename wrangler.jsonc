@@ -12,7 +12,7 @@
     {
       "binding": "DB",
       "database_name": "feed-your-pet-db",
-      "database_id": "replace-with-cloudflare-d1-database-id"
+      "database_id": "48f9bc98-a2a2-4514-9ecd-7965ba34d8be"
     }
   ],
   "vars": {
