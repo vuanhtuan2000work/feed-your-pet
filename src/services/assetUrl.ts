@@ -1,17 +1,11 @@
-type ChromeRuntimeGlobal = typeof globalThis & {
-  chrome?: {
-    runtime?: {
-      getURL?: (path: string) => string
-    }
-  }
-}
+import { safeGetExtensionUrl } from './extensionContext'
 
 export function getAssetUrl(path: string) {
   const normalizedPath = path.replace(/^\/+/, '')
-  const getRuntimeUrl = (globalThis as ChromeRuntimeGlobal).chrome?.runtime?.getURL
+  const extensionUrl = safeGetExtensionUrl(normalizedPath)
 
-  if (getRuntimeUrl) {
-    return getRuntimeUrl(normalizedPath)
+  if (extensionUrl) {
+    return extensionUrl
   }
 
   return `/${normalizedPath}`

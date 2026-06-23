@@ -59,8 +59,6 @@ const CONTENT_VISUAL_AREA_WEIGHT = 0.18
 export class PetScene extends Phaser.Scene {
   private bridge!: PetSceneBridge
   private pet?: Phaser.GameObjects.Sprite
-  private occlusionMaskGraphics?: Phaser.GameObjects.Graphics
-  private occlusionMask?: Phaser.Display.Masks.GeometryMask
   private contentBoundsByFrame = new Map<string, FrameContentBounds>()
   private contentVisualSizeByAnimation = new Map<string, number>()
   private currentAnimation?: string
@@ -119,7 +117,6 @@ export class PetScene extends Phaser.Scene {
     this.input.on('pointermove', (pointer: Phaser.Input.Pointer) => {
       this.lastPointerX = pointer.x
     })
-    this.occlusionMaskGraphics = this.add.graphics().setVisible(false)
   }
 
   update(time: number, delta: number) {
@@ -174,7 +171,6 @@ export class PetScene extends Phaser.Scene {
       this.liveIdle(time, delta)
     }
 
-    this.updatePageOcclusionMask()
     if (isStableSleeping) {
       return
     }
@@ -182,40 +178,6 @@ export class PetScene extends Phaser.Scene {
     this.applyPointerGaze()
     this.keepPetWithinCanvas()
     this.bridge.onPositionChange(Math.round(this.pet.x), Math.round(this.pet.y))
-  }
-
-  private updatePageOcclusionMask() {
-    if (!this.pet) {
-      return
-    }
-
-    const anchors = this.bridge.getHideAnchors()
-    if (anchors.length === 0) {
-      this.clearPageOcclusionMask()
-      return
-    }
-
-    const graphics = this.occlusionMaskGraphics ?? this.add.graphics().setVisible(false)
-    this.occlusionMaskGraphics = graphics
-    graphics.clear()
-    graphics.fillStyle(0xffffff, 1)
-    anchors.forEach((anchor) => {
-      graphics.fillRect(anchor.x, anchor.y, anchor.width, anchor.height)
-    })
-
-    if (!this.occlusionMask) {
-      this.occlusionMask = graphics.createGeometryMask()
-      this.occlusionMask.setInvertAlpha(true)
-      this.pet.setMask(this.occlusionMask)
-    }
-  }
-
-  private clearPageOcclusionMask() {
-    this.occlusionMaskGraphics?.clear()
-    if (this.pet?.mask) {
-      this.pet.clearMask(false)
-    }
-    this.occlusionMask = undefined
   }
 
   private createTextureFrames() {

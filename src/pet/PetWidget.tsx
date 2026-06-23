@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { createPortal } from 'react-dom'
 import { PetCanvas } from './PetCanvas'
 import { PetMenu } from './PetMenu'
 import { PetMoodIcon } from './PetMoodIcon'
@@ -18,7 +19,6 @@ import {
   stopPetSleepLoop,
 } from '../services/petSounds'
 import type { PetAnimationKey } from '../game/assets/manifest'
-import type { PetHideAnchor } from '../game/phaser/adapters/sceneBridge'
 import type { PetActionId } from '../types/pet'
 
 const WIDGET_SIZE = 220
@@ -30,24 +30,9 @@ const FREE_ROAM_MIN_TRAVEL_MS = 900
 const FREE_ROAM_MAX_TRAVEL_MS = 7_200
 const TAB_ID = CURRENT_TAB_ID
 const ACTIVE_TAB_TTL_MS = 2_500
-const HIDE_ANCHOR_SCAN_MS = 600
 const SLEEP_LOOP_CURL_START_MS = 900
 const INITIAL_CURSOR_EVENT_GRACE_MS = 800
-const HIDE_ANCHOR_MIN_WIDTH = 32
-const HIDE_ANCHOR_MIN_HEIGHT = 24
-const HIDE_ANCHOR_SELECTOR = [
-  '[data-pet-hide-anchor]',
-  'a[href]',
-  'button',
-  'input',
-  'textarea',
-  'select',
-  'img',
-  'video',
-  '[role="button"]',
-  '[role="link"]',
-  '[role="img"]',
-].join(',')
+const PET_TOP_Z_INDEX = 2_147_483_645
 
 type ActiveTabRecord = {
   tabId: string
@@ -229,93 +214,11 @@ function isRealCursorMove(event: CursorEventLike, mountedAtMs: number) {
   return true
 }
 
-function getRectIntersection(first: DOMRect, second: DOMRect) {
-  const left = Math.max(first.left, second.left)
-  const right = Math.min(first.right, second.right)
-  const top = Math.max(first.top, second.top)
-  const bottom = Math.min(first.bottom, second.bottom)
-
-  if (right <= left || bottom <= top) {
-    return undefined
-  }
-
-  return {
-    left,
-    top,
-    width: right - left,
-    height: bottom - top,
-  }
-}
-
-function isVisibleHideAnchor(element: HTMLElement, widget: HTMLElement) {
-  if (widget.contains(element) || element.closest('.pet-widget') || element.closest('.mouse-cursor')) {
-    return false
-  }
-
-  const style = window.getComputedStyle(element)
-  if (
-    style.display === 'none' ||
-    style.visibility === 'hidden' ||
-    style.opacity === '0' ||
-    element.hidden
-  ) {
-    return false
-  }
-
-  return true
-}
-
-function getHideAnchorSignature(anchors: PetHideAnchor[]) {
-  return anchors
-    .map((anchor) =>
-      [
-        anchor.id,
-        Math.round(anchor.x),
-        Math.round(anchor.y),
-        Math.round(anchor.width),
-        Math.round(anchor.height),
-      ].join(':'),
-    )
-    .join('|')
-}
-
-function collectPageHideAnchors(widget: HTMLElement): PetHideAnchor[] {
-  const widgetRect = widget.getBoundingClientRect()
-  if (widgetRect.width <= 0 || widgetRect.height <= 0) {
-    return []
-  }
-
-  return Array.from(document.querySelectorAll<HTMLElement>(HIDE_ANCHOR_SELECTOR))
-    .filter((element) => isVisibleHideAnchor(element, widget))
-    .map((element, index): PetHideAnchor | undefined => {
-      const elementRect = element.getBoundingClientRect()
-      const intersection = getRectIntersection(elementRect, widgetRect)
-      if (
-        !intersection ||
-        intersection.width < HIDE_ANCHOR_MIN_WIDTH ||
-        intersection.height < HIDE_ANCHOR_MIN_HEIGHT
-      ) {
-        return undefined
-      }
-
-      return {
-        id: element.id || element.dataset.petHideAnchor || `${element.tagName.toLowerCase()}:${index}`,
-        x: intersection.left - widgetRect.left,
-        y: intersection.top - widgetRect.top,
-        width: intersection.width,
-        height: intersection.height,
-      }
-    })
-    .filter((anchor): anchor is PetHideAnchor => anchor !== undefined)
-    .slice(0, 4)
-}
-
 export function PetWidget() {
   const widgetRef = useRef<HTMLElement | null>(null)
   const visibleRef = useRef(false)
   const ownerTabRef = useRef<string | undefined>(undefined)
   const cursorOwnerSignatureRef = useRef<string | undefined>(undefined)
-  const hideAnchorSignatureRef = useRef('')
   const reactionSoundSignatureRef = useRef<string | undefined>(undefined)
   const cursorIdleTimerRef = useRef<number | undefined>(undefined)
   const mountedAtRef = useRef(0)
@@ -347,8 +250,6 @@ export function PetWidget() {
       height: WIDGET_SIZE,
     }),
   )
-  const [petRenderNonce, setPetRenderNonce] = useState(0)
-  const [hideAnchors, setHideAnchors] = useState<PetHideAnchor[]>([])
   const [freeRoamAnimation, setFreeRoamAnimation] =
     useState<FreeRoamAnimationState>()
   const isFreeRoaming =
@@ -377,29 +278,7 @@ export function PetWidget() {
       ? freeRoamAnimation.tilt
       : undefined
 
-  const refreshHideAnchors = useCallback(() => {
-    if (!petVisible || !widgetRef.current) {
-      if (hideAnchorSignatureRef.current !== '') {
-        hideAnchorSignatureRef.current = ''
-        setHideAnchors([])
-      }
-      return
-    }
-
-    const anchors = collectPageHideAnchors(widgetRef.current)
-    const signature = getHideAnchorSignature(anchors)
-    if (signature === hideAnchorSignatureRef.current) {
-      return
-    }
-
-    hideAnchorSignatureRef.current = signature
-    setHideAnchors(anchors)
-  }, [petVisible])
-
   const showPetAtCursor = useCallback((nextCursor: WidgetPosition) => {
-    if (ownerTabRef.current !== TAB_ID) {
-      setPetRenderNonce((nonce) => nonce + 1)
-    }
     ownerTabRef.current = TAB_ID
     claimActiveTab()
     setCursor({ ...nextCursor, active: true })
@@ -646,31 +525,6 @@ export function PetWidget() {
   }, [state.state, widgetSize])
 
   useEffect(() => {
-    if (!petVisible) {
-      hideAnchorSignatureRef.current = ''
-      const frameId = window.requestAnimationFrame(() => setHideAnchors([]))
-      return () => window.cancelAnimationFrame(frameId)
-    }
-
-    const frameId = window.requestAnimationFrame(refreshHideAnchors)
-    const interval = window.setInterval(refreshHideAnchors, HIDE_ANCHOR_SCAN_MS)
-    window.addEventListener('scroll', refreshHideAnchors, true)
-    window.addEventListener('resize', refreshHideAnchors)
-
-    return () => {
-      window.cancelAnimationFrame(frameId)
-      window.clearInterval(interval)
-      window.removeEventListener('scroll', refreshHideAnchors, true)
-      window.removeEventListener('resize', refreshHideAnchors)
-    }
-  }, [petVisible, refreshHideAnchors])
-
-  useEffect(() => {
-    const frameId = window.requestAnimationFrame(refreshHideAnchors)
-    return () => window.cancelAnimationFrame(frameId)
-  }, [chasePosition.x, chasePosition.y, refreshHideAnchors, widgetSize.height, widgetSize.width])
-
-  useEffect(() => {
     mountedAtRef.current = Date.now()
 
     const onPointerMove = (event: CursorEventLike) => {
@@ -753,10 +607,14 @@ export function PetWidget() {
           window.innerHeight - widgetSize.height - VIEWPORT_MARGIN,
         )
 
-        return {
-          x: current.x + (targetX - current.x) * followStrength,
-          y: current.y + (targetY - current.y) * followStrength,
+        const nextX = current.x + (targetX - current.x) * followStrength
+        const nextY = current.y + (targetY - current.y) * followStrength
+
+        if (Math.abs(nextX - current.x) < 0.1 && Math.abs(nextY - current.y) < 0.1) {
+          return current
         }
+
+        return { x: nextX, y: nextY }
       })
       frameId = window.requestAnimationFrame(tickChase)
     }
@@ -825,6 +683,13 @@ export function PetWidget() {
           route = undefined
         }
 
+        if (
+          Math.abs(nextPosition.x - current.x) < 0.1 &&
+          Math.abs(nextPosition.y - current.y) < 0.1
+        ) {
+          return current
+        }
+
         return nextPosition
       })
       frameId = window.requestAnimationFrame(roam)
@@ -883,15 +748,18 @@ export function PetWidget() {
     }
 
     return {
-      left: `${chasePosition.x}px`,
-      top: `${chasePosition.y}px`,
-      right: 'auto',
-      bottom: 'auto',
+      transform: `translate3d(${Math.round(chasePosition.x)}px, ${Math.round(chasePosition.y)}px, 0)`,
+      zIndex: PET_TOP_Z_INDEX,
     }
   }, [chasePosition.x, chasePosition.y, petVisible])
 
-  return (
-    <aside ref={widgetRef} className="pet-widget" style={widgetStyle} aria-live="polite">
+  return createPortal(
+    <aside
+      ref={widgetRef}
+      className="pet-widget"
+      style={widgetStyle}
+      aria-live="polite"
+    >
       <PetMoodIcon mood={state.mood} />
       <PetMenu
         open={menuOpen}
@@ -899,15 +767,15 @@ export function PetWidget() {
         onAction={handleAction}
       />
       <PetCanvas
-        key={petRenderNonce}
+        active={petVisible}
         state={state}
         pointer={petPointer}
         forcedAnimation={forcedAnimation}
         forcedTilt={forcedTilt}
-        hideAnchors={hideAnchors}
         onPetClick={handlePetClick}
         onPositionChange={handlePositionChange}
       />
-    </aside>
+    </aside>,
+    document.body,
   )
 }

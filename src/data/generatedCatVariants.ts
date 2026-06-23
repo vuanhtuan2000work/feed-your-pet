@@ -20,8 +20,8 @@ export const GENERATED_CAT_VARIANTS = [
         height: 288
       },
       run_down_right: {
-        width: 866,
-        height: 288
+        width: 877,
+        height: 284
       },
       run_up_right: {
         width: 866,

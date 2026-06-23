@@ -7,13 +7,13 @@ import {
   type CursorOwnerEvent,
 } from '../services/tabTravelSync'
 import { getAssetUrl } from '../services/assetUrl'
+import { setNativeCursorHidden, teardownCustomCursorStyle } from './customCursorStyle'
 
 type CursorPoint = {
   x: number
   y: number
   visible: boolean
   pressed: boolean
-  overControl: boolean
   frameIndex: number
 }
 
@@ -26,16 +26,6 @@ const MOUSE_IDLE_DELAY_MS = 260
 const MOUSE_MOVEMENT_THRESHOLD = 2
 const MOUSE_RUN_FRAME_MS = 96
 const INITIAL_CURSOR_EVENT_GRACE_MS = 800
-
-function isControlTarget(target: EventTarget | null) {
-  if (!(target instanceof HTMLElement)) {
-    return false
-  }
-
-  return Boolean(
-    target.closest('input, textarea, select, button, a, [role="button"], [contenteditable="true"]'),
-  )
-}
 
 function isCurrentCursorOwnerEvent(event: CursorOwnerEvent) {
   const owner = readCursorOwner()
@@ -104,7 +94,6 @@ export function MouseCursor() {
     y: -100,
     visible: false,
     pressed: false,
-    overControl: false,
     frameIndex: MOUSE_IDLE_FRAME_INDEX,
   })
 
@@ -213,7 +202,6 @@ export function MouseCursor() {
         x: event.clientX,
         y: event.clientY,
         visible: true,
-        overControl: isControlTarget(event.target),
         frameIndex: frameIndex ?? current.frameIndex,
       }))
     }
@@ -276,14 +264,13 @@ export function MouseCursor() {
   }, [])
 
   useEffect(() => {
-    document.documentElement.classList.toggle(
-      'mouse-cursor-enabled',
-      cursor.visible && !cursor.overControl,
-    )
-    return () => document.documentElement.classList.remove('mouse-cursor-enabled')
-  }, [cursor.visible, cursor.overControl])
+    setNativeCursorHidden(cursor.visible)
+    return () => setNativeCursorHidden(false)
+  }, [cursor.visible])
 
-  if (!cursor.visible || cursor.overControl) {
+  useEffect(() => teardownCustomCursorStyle, [])
+
+  if (!cursor.visible) {
     return null
   }
 

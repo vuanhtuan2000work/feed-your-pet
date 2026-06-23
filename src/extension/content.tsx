@@ -1,8 +1,15 @@
 import { StrictMode } from 'react'
-import { createRoot } from 'react-dom/client'
+import { createRoot, type Root } from 'react-dom/client'
 import '../pet/petOverlay.css'
 import { PetOverlay } from '../app/PetOverlay'
 import { ACTIVE_TAB_KEY } from '../data/petConfig'
+import { teardownCustomCursorStyle } from '../pet/customCursorStyle'
+import {
+  isExtensionContextValid,
+  safeAddMessageListener,
+  safeStorageGet,
+  watchExtensionContext,
+} from '../services/extensionContext'
 
 const ROOT_ID = 'feed-your-pet-extension-root'
 const ENABLED_SITES_KEY = 'feed-your-pet:enabled-sites'
@@ -11,26 +18,7 @@ type FeedYourPetWindow = Window & {
   __feedYourPetContentLoaded?: boolean
 }
 
-type ChromeRuntimeGlobal = typeof globalThis & {
-  chrome?: {
-    runtime?: {
-      onMessage?: {
-        addListener: (
-          listener: (
-            message: { type?: string },
-            sender: unknown,
-            sendResponse: () => void,
-          ) => void,
-        ) => void
-      }
-    }
-    storage?: {
-      local?: {
-        get: (key: string) => Promise<Record<string, unknown>>
-      }
-    }
-  }
-}
+let overlayRoot: Root | undefined
 
 function normalizeHost(hostname: string) {
   return hostname.replace(/^www\./, '').toLowerCase()
@@ -41,9 +29,8 @@ function isHostEnabled(currentHost: string, enabledHost: string) {
 }
 
 async function isCurrentSiteEnabled() {
-  const storage = (globalThis as ChromeRuntimeGlobal).chrome?.storage?.local
-  if (!storage) {
-    return true
+  if (!isExtensionContextValid()) {
+    return false
   }
 
   const currentHost = normalizeHost(window.location.hostname)
@@ -51,7 +38,11 @@ async function isCurrentSiteEnabled() {
     return false
   }
 
-  const result = await storage.get(ENABLED_SITES_KEY)
+  const result = await safeStorageGet(ENABLED_SITES_KEY)
+  if (!result) {
+    return false
+  }
+
   const enabledSites = result[ENABLED_SITES_KEY]
   return (
     Array.isArray(enabledSites) &&
@@ -59,7 +50,18 @@ async function isCurrentSiteEnabled() {
   )
 }
 
+function teardownPetOverlay() {
+  overlayRoot?.unmount()
+  overlayRoot = undefined
+  document.getElementById(ROOT_ID)?.remove()
+  teardownCustomCursorStyle()
+}
+
 function mountPetOverlay() {
+  if (!isExtensionContextValid()) {
+    return
+  }
+
   if (document.getElementById(ROOT_ID)) {
     return
   }
@@ -69,7 +71,8 @@ function mountPetOverlay() {
   rootElement.className = 'feed-your-pet-extension-root'
   document.documentElement.append(rootElement)
 
-  createRoot(rootElement).render(
+  overlayRoot = createRoot(rootElement)
+  overlayRoot.render(
     <StrictMode>
       <PetOverlay />
     </StrictMode>,
@@ -77,11 +80,20 @@ function mountPetOverlay() {
 }
 
 function activatePetOverlay() {
+  if (!isExtensionContextValid()) {
+    return
+  }
+
   window.localStorage.removeItem(ACTIVE_TAB_KEY)
   mountPetOverlay()
 }
 
 async function mountIfEnabled() {
+  if (!isExtensionContextValid()) {
+    teardownPetOverlay()
+    return
+  }
+
   if (await isCurrentSiteEnabled()) {
     mountPetOverlay()
   }
@@ -95,14 +107,16 @@ if (petWindow.__feedYourPetContentLoaded) {
   petWindow.__feedYourPetContentLoaded = true
 
   if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', mountIfEnabled, { once: true })
+    document.addEventListener('DOMContentLoaded', () => void mountIfEnabled(), { once: true })
   } else {
     void mountIfEnabled()
   }
 
-  ;(globalThis as ChromeRuntimeGlobal).chrome?.runtime?.onMessage?.addListener((message) => {
+  safeAddMessageListener((message) => {
     if (message.type === 'FEED_YOUR_PET_ENABLE_SITE') {
       activatePetOverlay()
     }
   })
+
+  watchExtensionContext(teardownPetOverlay)
 }

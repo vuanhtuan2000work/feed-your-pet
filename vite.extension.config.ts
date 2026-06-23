@@ -18,7 +18,12 @@ function catVariantsPlugin(): Plugin {
 }
 
 export default defineConfig({
+  mode: 'production',
   plugins: [catVariantsPlugin(), react()],
+  define: {
+    'process.env.NODE_ENV': JSON.stringify('production'),
+    'process.env': '{}',
+  },
   build: {
     outDir: 'dist-extension',
     emptyOutDir: true,
